@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:charset_converter/charset_converter.dart';
-
 class TokenLogInfo {
   const TokenLogInfo({
     required this.productId,
@@ -64,13 +62,6 @@ class TokenLogParser {
     try {
       return utf8.decode(bytes);
     } on FormatException {
-      for (final charset in const ['GBK', 'GB18030']) {
-        try {
-          return CharsetConverter.decode(charset, bytes);
-        } catch (_) {
-          // Try the next charset.
-        }
-      }
       return utf8.decode(bytes, allowMalformed: true);
     }
   }

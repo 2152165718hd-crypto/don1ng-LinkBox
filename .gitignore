@@ -10,6 +10,7 @@ coverage/
 android/.gradle/
 android/local.properties
 android/app/build/
+android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
 
 *.iml
 .idea/

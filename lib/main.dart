@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -34,7 +35,70 @@ class LinkBoxApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'don1ng LinkBox',
       theme: LinkBoxTheme.light(),
-      home: const LinkBoxHomePage(),
+      home: const _CoverGate(child: LinkBoxHomePage()),
+    );
+  }
+}
+
+class _CoverGate extends StatefulWidget {
+  const _CoverGate({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_CoverGate> createState() => _CoverGateState();
+}
+
+class _CoverGateState extends State<_CoverGate> {
+  bool _showCover = true;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(const Duration(milliseconds: 1600), _dismiss);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _dismiss() {
+    if (!mounted || !_showCover) return;
+    setState(() => _showCover = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_showCover) return widget.child;
+    return Scaffold(
+      backgroundColor: const Color(0xFF0E4D64),
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _dismiss,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              'assets/branding/linkbox_cover.png',
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.high,
+            ),
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: 28 + MediaQuery.of(context).padding.bottom,
+              child: FilledButton.icon(
+                onPressed: _dismiss,
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text('进入'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -77,7 +141,7 @@ class _LinkBoxHomePageState extends ConsumerState<LinkBoxHomePage> {
           if (state.statusText.isNotEmpty)
             Container(
               width: double.infinity,
-              color: Theme.of(context).colorScheme.surfaceVariant,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Text(state.statusText, maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
@@ -175,7 +239,7 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
             child: Column(
               children: [
                 DropdownButtonFormField<AuthMode>(
-                  value: _authMode,
+                  initialValue: _authMode,
                   items: const [
                     DropdownMenuItem(value: AuthMode.projectGroup, child: Text('项目分组鉴权')),
                     DropdownMenuItem(value: AuthMode.user, child: Text('用户鉴权')),

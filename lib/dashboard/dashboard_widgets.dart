@@ -239,7 +239,7 @@ class _EnumControl extends StatelessWidget {
         Text(property.displayName, style: Theme.of(context).textTheme.labelLarge),
         const Spacer(),
         DropdownButtonFormField<String>(
-          value: entries.any((item) => item.key == current) ? current : null,
+          initialValue: entries.any((item) => item.key == current) ? current : null,
           items: entries
               .map((entry) => DropdownMenuItem(value: entry.key, child: Text('${entry.value} (${entry.key})')))
               .toList(),

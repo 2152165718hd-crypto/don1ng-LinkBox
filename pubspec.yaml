@@ -9,11 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  charset_converter: ^2.3.0
   crypto: ^3.0.6
   dio: ^5.7.0
   file_picker: ^8.1.7
-  fl_chart: ^0.70.3
+  fl_chart: ^1.2.0
   flutter_riverpod: ^2.6.1
   flutter_secure_storage: ^9.2.4
   image_picker: ^1.1.2
@@ -30,3 +29,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/branding/linkbox_cover.png
+    - assets/branding/linkbox_icon_1024.png

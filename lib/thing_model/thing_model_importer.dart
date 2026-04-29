@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:charset_converter/charset_converter.dart';
-
 import '../storage/models.dart';
 
 class ThingModelSkippedItem {
@@ -77,15 +75,7 @@ class ThingModelImporter {
     try {
       return utf8.decode(bytes);
     } on FormatException {
-      for (final charset in const ['GBK', 'GB18030']) {
-        try {
-          warnings.add('文件不是标准 UTF-8，已尝试按 $charset 解码。');
-          return CharsetConverter.decode(charset, bytes);
-        } catch (_) {
-          // Try the next Chinese charset before falling back to malformed UTF-8.
-        }
-      }
-      warnings.add('无法确认文件编码，已用容错 UTF-8 解码，中文可能显示异常。');
+      warnings.add('文件不是标准 UTF-8，已用容错解码；如中文异常，请从 OneNET 重新导出 UTF-8 JSON。');
       return utf8.decode(bytes, allowMalformed: true);
     }
   }
