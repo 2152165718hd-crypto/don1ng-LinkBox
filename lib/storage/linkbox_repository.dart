@@ -15,6 +15,7 @@ class LinkBoxRepository {
   }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   static const _accessKeyStorageKey = 'onenet_access_key';
+  static const _maxLogEntries = 1000;
   final FlutterSecureStorage _secureStorage;
   Database? _db;
 
@@ -306,9 +307,26 @@ class LinkBoxRepository {
     return file.path;
   }
 
-  Future<void> cacheRuntimeValue(RuntimeValue value) async {
+  Future<void> cacheRuntimeValue(
+    RuntimeValue value, {
+    int retentionDays = 30,
+  }) async {
     final db = await database;
     await db.insert('runtime_values', value.toDbMap());
+    await pruneOldValues(retentionDays: retentionDays);
+  }
+
+  Future<void> pruneOldValues({int retentionDays = 30}) async {
+    if (retentionDays <= 0) return;
+    final db = await database;
+    final cutoff = DateTime.now()
+        .subtract(Duration(days: retentionDays))
+        .millisecondsSinceEpoch;
+    await db.delete(
+      'runtime_values',
+      where: 'time < ?',
+      whereArgs: [cutoff],
+    );
   }
 
   Future<Map<String, RuntimeValue>> latestValues() async {
@@ -351,6 +369,14 @@ class LinkBoxRepository {
   Future<void> addLog(AppLogEntry entry) async {
     final db = await database;
     await db.insert('app_logs', entry.toDbMap());
+    await db.rawDelete('''
+      DELETE FROM app_logs
+      WHERE id NOT IN (
+        SELECT id FROM app_logs
+        ORDER BY time DESC, id DESC
+        LIMIT $_maxLogEntries
+      )
+    ''');
   }
 
   Future<List<AppLogEntry>> loadLogs({int limit = 200}) async {
@@ -367,7 +393,10 @@ class LinkBoxRepository {
     final pages = await loadPages();
     final widgets = await loadWidgets();
     final dir = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, 'don1ng-linkbox-backup.json'));
+    final file = File(p.join(
+      dir.path,
+      'don1ng-linkbox-backup-${_fileTimestamp(DateTime.now())}.json',
+    ));
     final data = {
       'schema': 2,
       'exported_at': DateTime.now().toIso8601String(),
@@ -377,5 +406,88 @@ class LinkBoxRepository {
       'dashboard_widgets': widgets.map((item) => item.toExportMap()).toList(),
     };
     return file.writeAsString(const JsonEncoder.withIndent('  ').convert(data));
+  }
+
+  Future<void> importBackup(Uint8List bytes) async {
+    final decoded = jsonDecode(utf8.decode(bytes));
+    if (decoded is! Map) {
+      throw const FormatException('备份文件根节点必须是 JSON 对象');
+    }
+    final root = _stringKeyMap(decoded);
+    final configMap = _requiredMap(root['project_config'], 'project_config');
+    final existingConfig = await loadConfig();
+    final importedAccessKey =
+        configMap['access_key']?.toString() ?? existingConfig.accessKey;
+    final config = ProjectConfig.fromMap(
+      configMap,
+      accessKey: importedAccessKey,
+    );
+    final properties = _mapList(root['thing_properties'], 'thing_properties')
+        .map((item) => ThingProperty.fromMap(_normalizePropertyMap(item)))
+        .toList();
+    final pages = _mapList(root['dashboard_pages'], 'dashboard_pages')
+        .map(DashboardPageConfig.fromMap)
+        .toList();
+    final widgets = _mapList(root['dashboard_widgets'], 'dashboard_widgets')
+        .map(DashboardWidgetConfig.fromMap)
+        .toList();
+
+    await saveConfig(config);
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('thing_properties');
+      await txn.delete('dashboard_widgets');
+      await txn.delete('dashboard_pages');
+      for (final property in properties) {
+        await txn.insert('thing_properties', property.toDbMap());
+      }
+      for (final page in pages) {
+        await txn.insert('dashboard_pages', page.toDbMap());
+      }
+      for (final widget in widgets) {
+        await txn.insert('dashboard_widgets', widget.toDbMap());
+      }
+    });
+  }
+
+  String _fileTimestamp(DateTime time) {
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${time.year}${two(time.month)}${two(time.day)}-'
+        '${two(time.hour)}${two(time.minute)}${two(time.second)}';
+  }
+
+  Map<String, Object?> _requiredMap(Object? node, String name) {
+    if (node is! Map) {
+      throw FormatException('备份文件缺少 $name 对象');
+    }
+    return _stringKeyMap(node);
+  }
+
+  List<Map<String, Object?>> _mapList(Object? node, String name) {
+    if (node == null) return const [];
+    if (node is! List) {
+      throw FormatException('备份文件 $name 必须是数组');
+    }
+    return [
+      for (final item in node)
+        if (item is Map)
+          _stringKeyMap(item)
+        else
+          throw FormatException('$name 包含非对象节点')
+    ];
+  }
+
+  Map<String, Object?> _stringKeyMap(Map map) {
+    return map.map((key, value) => MapEntry(key.toString(), value));
+  }
+
+  Map<String, Object?> _normalizePropertyMap(Map<String, Object?> map) {
+    final normalized = Map<String, Object?>.of(map);
+    final enumValues = normalized['enum_values'];
+    if (enumValues is Map) {
+      normalized['enum_values'] = jsonEncode(_stringKeyMap(enumValues));
+    }
+    normalized['enum_values'] ??= '{}';
+    return normalized;
   }
 }

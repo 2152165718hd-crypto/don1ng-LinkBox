@@ -7,8 +7,7 @@
         android:label="don1ng LinkBox"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:name="${applicationName}"
-        android:usesCleartextTraffic="true">
+        android:name="${applicationName}">
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -45,7 +45,7 @@ class LinkBoxState {
       values: const {},
       logs: const [],
       connectionState: OnenetMqttConnectionState.disconnected,
-      deviceOnline: true,
+      deviceOnline: false,
     );
   }
 
@@ -89,12 +89,7 @@ class LinkBoxController extends ChangeNotifier {
         _mqttService = mqttService ?? OnenetMqttService(),
         _importer = importer ?? ThingModelImporter(),
         _dashboardFactory = dashboardFactory ?? DashboardFactory(),
-        _validator = validator ?? const ThingValueValidator() {
-    _messageSub = _mqttService.messages.listen(_handleRealtimeMessage);
-    _stateSub = _mqttService.states.listen((connectionState) {
-      _setState(state.copyWith(connectionState: connectionState));
-    });
-  }
+        _validator = validator ?? const ThingValueValidator();
 
   final LinkBoxRepository _repository;
   final OnenetApiClient _apiClient;
@@ -103,14 +98,42 @@ class LinkBoxController extends ChangeNotifier {
   final DashboardFactory _dashboardFactory;
   final ThingValueValidator _validator;
 
-  late final StreamSubscription<OnenetRealtimeMessage> _messageSub;
-  late final StreamSubscription<OnenetMqttConnectionState> _stateSub;
+  StreamSubscription<OnenetRealtimeMessage>? _messageSub;
+  StreamSubscription<OnenetMqttConnectionState>? _stateSub;
   Timer? _pollTimer;
+  Future<void>? _initFuture;
+  bool _initialized = false;
   LinkBoxState state = LinkBoxState.initial();
 
   Future<void> init() async {
+    _initFuture ??= _init();
+    await _initFuture;
+  }
+
+  Future<void> _init() async {
     _setState(state.copyWith(busy: true, statusText: '正在加载本地配置'));
     await _reloadCoreState(statusText: '本地配置已加载');
+    _initialized = true;
+    _ensureSubscriptions();
+  }
+
+  void _ensureSubscriptions() {
+    _messageSub ??= _mqttService.messages.listen(_handleRealtimeMessage);
+    _stateSub ??= _mqttService.states.listen(_handleConnectionState);
+  }
+
+  void _handleConnectionState(OnenetMqttConnectionState connectionState) {
+    final deviceOnline = switch (connectionState) {
+      OnenetMqttConnectionState.connected => state.deviceOnline,
+      OnenetMqttConnectionState.connecting ||
+      OnenetMqttConnectionState.disconnected ||
+      OnenetMqttConnectionState.failed =>
+        false,
+    };
+    _setState(state.copyWith(
+      connectionState: connectionState,
+      deviceOnline: deviceOnline,
+    ));
   }
 
   Future<void> saveConfig(ProjectConfig config) async {
@@ -187,7 +210,10 @@ class LinkBoxController extends ChangeNotifier {
       final values = Map<String, RuntimeValue>.of(state.values);
       for (final value in latest) {
         values[value.identifier] = value;
-        await _repository.cacheRuntimeValue(value);
+        await _repository.cacheRuntimeValue(
+          value,
+          retentionDays: _runtimeRetentionDays,
+        );
       }
       await _log(LogLevel.info, 'onenet-api', '已同步 ${latest.length} 个最新属性');
       _setState(
@@ -231,7 +257,10 @@ class LinkBoxController extends ChangeNotifier {
     _pollTimer = null;
     await _mqttService.disconnect();
     await _log(LogLevel.info, 'mqtt', '应用长连接已断开');
-    await _reloadLogs();
+    _setState(state.copyWith(
+      deviceOnline: false,
+      logs: await _repository.loadLogs(),
+    ));
   }
 
   Future<String?> sendControl(ThingProperty property, Object? rawValue) async {
@@ -251,7 +280,10 @@ class LinkBoxController extends ChangeNotifier {
         value: validation.value,
         time: DateTime.now(),
       );
-      await _repository.cacheRuntimeValue(runtimeValue);
+      await _repository.cacheRuntimeValue(
+        runtimeValue,
+        retentionDays: _runtimeRetentionDays,
+      );
       await _log(LogLevel.info, 'control', '${property.displayName} 控制指令已下发');
       final values = Map<String, RuntimeValue>.of(state.values);
       values[property.identifier] = runtimeValue;
@@ -282,7 +314,10 @@ class LinkBoxController extends ChangeNotifier {
         limit: 100,
       );
       for (final value in remote) {
-        await _repository.cacheRuntimeValue(value);
+        await _repository.cacheRuntimeValue(
+          value,
+          retentionDays: _runtimeRetentionDays,
+        );
       }
       return remote;
     } catch (_) {
@@ -296,6 +331,24 @@ class LinkBoxController extends ChangeNotifier {
     await _log(LogLevel.info, 'backup', '配置已导出 ${file.path}');
     await _reloadLogs();
     return file;
+  }
+
+  Future<void> importBackup(Uint8List bytes) async {
+    _setState(state.copyWith(busy: true, statusText: '正在导入备份'));
+    try {
+      await _repository.importBackup(bytes);
+      await _log(LogLevel.info, 'backup', '配置备份已导入');
+      await _reloadCoreState(statusText: '备份导入完成');
+    } catch (error) {
+      await _log(LogLevel.error, 'backup', '配置备份导入失败',
+          detail: error.toString());
+      _setState(state.copyWith(
+        busy: false,
+        logs: await _repository.loadLogs(),
+        statusText: '备份导入失败',
+      ));
+      rethrow;
+    }
   }
 
   Future<void> updateWidget(DashboardWidgetConfig widget) async {
@@ -358,25 +411,59 @@ class LinkBoxController extends ChangeNotifier {
     );
   }
 
-  void _handleRealtimeMessage(OnenetRealtimeMessage message) async {
-    if (message.type == OnenetRealtimeMessageType.lifecycle) {
-      final data = message.payload['data'];
-      final status = data is Map ? data['status']?.toString() : null;
-      _setState(state.copyWith(deviceOnline: status != 'offline'));
-      await _log(LogLevel.info, 'lifecycle', '设备状态 ${status ?? 'unknown'}');
-      await _reloadLogs();
+  int get _runtimeRetentionDays {
+    final days = state.config.historyDays;
+    if (days < 30) return 30;
+    if (days > 3650) return 3650;
+    return days;
+  }
+
+  void _handleRealtimeMessage(OnenetRealtimeMessage message) {
+    unawaited(_processRealtimeMessage(message));
+  }
+
+  Future<void> _processRealtimeMessage(OnenetRealtimeMessage message) async {
+    try {
+      await _waitUntilInitialized();
+      if (message.type == OnenetRealtimeMessageType.lifecycle) {
+        final data = message.payload['data'];
+        final status = data is Map ? data['status']?.toString() : null;
+        _setState(state.copyWith(deviceOnline: status != 'offline'));
+        await _log(LogLevel.info, 'lifecycle', '设备状态 ${status ?? 'unknown'}');
+        await _reloadLogs();
+        return;
+      }
+      final runtimeValues = message.toRuntimeValues();
+      if (runtimeValues.isEmpty) return;
+      final values = Map<String, RuntimeValue>.of(state.values);
+      for (final entry in runtimeValues.entries) {
+        values[entry.key] = entry.value;
+        await _repository.cacheRuntimeValue(
+          entry.value,
+          retentionDays: _runtimeRetentionDays,
+        );
+      }
+      await _log(LogLevel.info, 'mqtt', '收到 ${runtimeValues.length} 个实时属性');
+      _setState(
+          state.copyWith(values: values, logs: await _repository.loadLogs()));
+    } catch (error) {
+      try {
+        await _log(LogLevel.error, 'mqtt', '实时消息处理失败',
+            detail: error.toString());
+        await _reloadLogs();
+      } catch (_) {
+        // Avoid surfacing unhandled errors from fire-and-forget MQTT handling.
+      }
+    }
+  }
+
+  Future<void> _waitUntilInitialized() async {
+    if (_initialized) return;
+    if (_initFuture == null) {
+      await init();
       return;
     }
-    final runtimeValues = message.toRuntimeValues();
-    if (runtimeValues.isEmpty) return;
-    final values = Map<String, RuntimeValue>.of(state.values);
-    for (final entry in runtimeValues.entries) {
-      values[entry.key] = entry.value;
-      await _repository.cacheRuntimeValue(entry.value);
-    }
-    await _log(LogLevel.info, 'mqtt', '收到 ${runtimeValues.length} 个实时属性');
-    _setState(
-        state.copyWith(values: values, logs: await _repository.loadLogs()));
+    await _initFuture;
   }
 
   void _startPollingFallback() {
@@ -385,7 +472,7 @@ class LinkBoxController extends ChangeNotifier {
       Duration(seconds: state.config.refreshSeconds.clamp(5, 3600).toInt()),
       (_) {
         if (state.connectionState != OnenetMqttConnectionState.connected) {
-          refreshLatest();
+          unawaited(refreshLatest());
         }
       },
     );
@@ -399,9 +486,9 @@ class LinkBoxController extends ChangeNotifier {
   @override
   void dispose() {
     _pollTimer?.cancel();
-    _messageSub.cancel();
-    _stateSub.cancel();
-    _mqttService.dispose();
+    unawaited(_messageSub?.cancel());
+    unawaited(_stateSub?.cancel());
+    unawaited(_mqttService.dispose());
     super.dispose();
   }
 }

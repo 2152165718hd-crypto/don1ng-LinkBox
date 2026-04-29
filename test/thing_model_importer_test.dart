@@ -39,4 +39,43 @@ void main() {
     expect(result.properties.first.accessMode, AccessMode.readWrite);
     expect(result.skipped, hasLength(1));
   });
+
+  test('only treats enum specs as enum values', () async {
+    final jsonText = jsonEncode({
+      'properties': [
+        {
+          'identifier': 'Name',
+          'name': '名称',
+          'accessMode': 'r',
+          'dataType': {
+            'type': 'string',
+            'specs': {'length': 64, 'maxLength': 128},
+          },
+        },
+        {
+          'identifier': 'Mode',
+          'name': '模式',
+          'accessMode': 'rw',
+          'dataType': {
+            'type': 'enum',
+            'specs': {
+              '0': {'name': '关闭'},
+              '1': '开启',
+              'unit': '',
+            },
+          },
+        },
+      ],
+    });
+
+    final result = await ThingModelImporter()
+        .importBytes(Uint8List.fromList(utf8.encode(jsonText)));
+
+    final name =
+        result.properties.singleWhere((item) => item.identifier == 'Name');
+    final mode =
+        result.properties.singleWhere((item) => item.identifier == 'Mode');
+    expect(name.enumValues, isEmpty);
+    expect(mode.enumValues, {'0': '关闭', '1': '开启'});
+  });
 }

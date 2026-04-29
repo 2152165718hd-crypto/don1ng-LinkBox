@@ -23,7 +23,12 @@ class OnenetAuth {
         ((now ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000) + ttlSeconds;
     final resource = config.resource;
     final stringForSignature = '$effectiveTime\n$method\n$resource\n$version';
-    final keyBytes = base64Decode(config.accessKey.trim());
+    final List<int> keyBytes;
+    try {
+      keyBytes = base64Decode(config.accessKey.trim());
+    } on FormatException {
+      throw const FormatException('AccessKey 格式错误，必须是合法的 Base64 编码');
+    }
     final digest = Hmac(_hashAlgorithm(method), keyBytes)
         .convert(utf8.encode(stringForSignature))
         .bytes;

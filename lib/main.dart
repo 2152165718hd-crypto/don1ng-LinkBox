@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/app_theme.dart';
+import 'core/formatters.dart';
+import 'dashboard/dashboard_constants.dart';
 import 'dashboard/dashboard_widgets.dart';
 import 'dashboard/icon_library.dart';
 import 'onenet/onenet_mqtt_service.dart';
@@ -231,9 +233,31 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
   final _historyDays = TextEditingController();
   AuthMode _authMode = AuthMode.projectGroup;
   String _fingerprint = '';
+  bool _hasUserEdited = false;
+  bool _syncingControllers = false;
+
+  @override
+  void initState() {
+    super.initState();
+    for (final controller in _textControllers) {
+      controller.addListener(_markUserEdited);
+    }
+    widget.controller.addListener(_syncFromStateIfPristine);
+    _syncControllers(widget.controller.state.config, markPristine: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ConfigScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller.removeListener(_syncFromStateIfPristine);
+    widget.controller.addListener(_syncFromStateIfPristine);
+    _syncFromStateIfPristine();
+  }
 
   @override
   void dispose() {
+    widget.controller.removeListener(_syncFromStateIfPristine);
     _projectId.dispose();
     _groupId.dispose();
     _userId.dispose();
@@ -245,10 +269,34 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
     super.dispose();
   }
 
+  List<TextEditingController> get _textControllers => [
+        _projectId,
+        _groupId,
+        _userId,
+        _accessKey,
+        _productId,
+        _deviceName,
+        _refreshSeconds,
+        _historyDays,
+      ];
+
+  void _markUserEdited() {
+    if (!_syncingControllers) {
+      _hasUserEdited = true;
+    }
+  }
+
+  void _syncFromStateIfPristine() {
+    if (!mounted || _hasUserEdited) return;
+    final nextFingerprint = _configFingerprint(widget.controller.state.config);
+    if (_fingerprint == nextFingerprint) return;
+    setState(() {
+      _syncControllers(widget.controller.state.config, markPristine: true);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final state = widget.controller.state;
-    _syncControllers(state.config);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -267,8 +315,10 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
                         value: AuthMode.projectGroup, child: Text('项目分组鉴权')),
                     DropdownMenuItem(value: AuthMode.user, child: Text('用户鉴权')),
                   ],
-                  onChanged: (value) => setState(
-                      () => _authMode = value ?? AuthMode.projectGroup),
+                  onChanged: (value) => setState(() {
+                    _hasUserEdited = true;
+                    _authMode = value ?? AuthMode.projectGroup;
+                  }),
                   decoration: const InputDecoration(labelText: '鉴权模式'),
                 ),
                 const SizedBox(height: 10),
@@ -338,6 +388,11 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
                       icon: const Icon(Icons.ios_share),
                       label: const Text('导出配置'),
                     ),
+                    OutlinedButton.icon(
+                      onPressed: _importBackup,
+                      icon: const Icon(Icons.settings_backup_restore),
+                      label: const Text('导入备份'),
+                    ),
                   ],
                 ),
               ],
@@ -350,8 +405,8 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
     );
   }
 
-  void _syncControllers(ProjectConfig config) {
-    final nextFingerprint = [
+  String _configFingerprint(ProjectConfig config) {
+    return [
       config.projectId,
       config.groupId,
       config.userId,
@@ -362,17 +417,32 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
       config.refreshSeconds,
       config.historyDays,
     ].join('|');
-    if (_fingerprint == nextFingerprint) return;
+  }
+
+  void _syncControllers(ProjectConfig config, {bool markPristine = false}) {
+    final nextFingerprint = _configFingerprint(config);
+    if (_fingerprint == nextFingerprint) {
+      if (markPristine) _hasUserEdited = false;
+      return;
+    }
     _fingerprint = nextFingerprint;
-    _projectId.text = config.projectId;
-    _groupId.text = config.groupId;
-    _userId.text = config.userId;
-    _accessKey.text = config.accessKey;
-    _productId.text = config.productId;
-    _deviceName.text = config.deviceName;
-    _authMode = config.authMode;
-    _refreshSeconds.text = config.refreshSeconds.toString();
-    _historyDays.text = config.historyDays.toString();
+    _syncingControllers = true;
+    try {
+      _projectId.text = config.projectId;
+      _groupId.text = config.groupId;
+      _userId.text = config.userId;
+      _accessKey.text = config.accessKey;
+      _productId.text = config.productId;
+      _deviceName.text = config.deviceName;
+      _authMode = config.authMode;
+      _refreshSeconds.text = config.refreshSeconds.toString();
+      _historyDays.text = config.historyDays.toString();
+    } finally {
+      _syncingControllers = false;
+    }
+    if (markPristine) {
+      _hasUserEdited = false;
+    }
   }
 
   Future<void> _save() async {
@@ -389,6 +459,7 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
     );
     await widget.controller.saveConfig(config);
     if (mounted) {
+      setState(() => _syncControllers(config, markPristine: true));
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('配置已保存')));
     }
@@ -402,10 +473,16 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
     );
     if (result == null || result.files.isEmpty) return;
     final file = result.files.single;
-    final bytes = file.bytes ?? await File(file.path!).readAsBytes();
+    final bytes = await _readPickedFileBytes(file);
+    if (bytes == null) {
+      if (!mounted) return;
+      _showSnackBar(context, '无法读取 Token.log 文件内容');
+      return;
+    }
     try {
-      final info = await TokenLogParser().parseBytes(Uint8List.fromList(bytes));
+      final info = await TokenLogParser().parseBytes(bytes);
       setState(() {
+        _hasUserEdited = true;
         _productId.text = info.productId;
         _deviceName.text = info.deviceName;
       });
@@ -421,6 +498,37 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Token.log 识别失败: $error')));
+      }
+    }
+  }
+
+  Future<void> _importBackup() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['json'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final bytes = await _readPickedFileBytes(result.files.single);
+    if (bytes == null) {
+      if (!mounted) return;
+      _showSnackBar(context, '无法读取备份文件内容');
+      return;
+    }
+    try {
+      await widget.controller.importBackup(bytes);
+      if (mounted) {
+        setState(() {
+          _syncControllers(
+            widget.controller.state.config,
+            markPristine: true,
+          );
+        });
+        _showSnackBar(context, '备份已导入');
+      }
+    } catch (error) {
+      if (mounted) {
+        _showSnackBar(context, '备份导入失败: $error');
       }
     }
   }
@@ -476,10 +584,14 @@ class _ThingModelScreen extends StatelessWidget {
     );
     if (result == null || result.files.isEmpty) return;
     final file = result.files.single;
-    final bytes = file.bytes ?? await File(file.path!).readAsBytes();
+    final bytes = await _readPickedFileBytes(file);
+    if (bytes == null) {
+      if (!context.mounted) return;
+      _showSnackBar(context, '无法读取物模型文件内容');
+      return;
+    }
     try {
-      final importResult =
-          await controller.importThingModel(Uint8List.fromList(bytes));
+      final importResult = await controller.importThingModel(bytes);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -647,11 +759,16 @@ class _DashboardCanvas extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        var canvasWidth = constraints.maxWidth - 24;
-        var canvasHeight = 360.0;
+        var canvasWidth =
+            constraints.maxWidth - (DashboardLayoutConstants.canvasPadding * 2);
+        var canvasHeight = DashboardLayoutConstants.minCanvasHeight;
         for (final item in widgets) {
-          final right = item.x + item.width + 16;
-          final bottom = item.y + item.height + 16;
+          final right = item.x +
+              item.width +
+              DashboardLayoutConstants.canvasBorderPadding;
+          final bottom = item.y +
+              item.height +
+              DashboardLayoutConstants.canvasBorderPadding;
           if (right > canvasWidth) canvasWidth = right;
           if (bottom > canvasHeight) canvasHeight = bottom;
         }
@@ -687,6 +804,12 @@ class _DashboardCanvas extends StatelessWidget {
                         property: propertyMap[item.propertyIdentifier]!,
                         value: state.values[item.propertyIdentifier],
                         editMode: editMode,
+                        maxX: (canvasWidth - item.width)
+                            .clamp(0.0, double.infinity)
+                            .toDouble(),
+                        maxY: (canvasHeight - item.height)
+                            .clamp(0.0, double.infinity)
+                            .toDouble(),
                       ),
                     ),
                 ],
@@ -706,6 +829,8 @@ class _DashboardTileFrame extends StatelessWidget {
     required this.property,
     required this.value,
     required this.editMode,
+    required this.maxX,
+    required this.maxY,
   });
 
   final LinkBoxController controller;
@@ -713,6 +838,8 @@ class _DashboardTileFrame extends StatelessWidget {
   final ThingProperty property;
   final RuntimeValue? value;
   final bool editMode;
+  final double maxX;
+  final double maxY;
 
   @override
   Widget build(BuildContext context) {
@@ -731,8 +858,8 @@ class _DashboardTileFrame extends StatelessWidget {
       onPanUpdate: (details) async {
         await controller.updateWidget(
           config.copyWith(
-            x: (config.x + details.delta.dx).clamp(0, 1200).toDouble(),
-            y: (config.y + details.delta.dy).clamp(0, 2400).toDouble(),
+            x: (config.x + details.delta.dx).clamp(0.0, maxX).toDouble(),
+            y: (config.y + details.delta.dy).clamp(0.0, maxY).toDouble(),
           ),
         );
       },
@@ -1020,13 +1147,11 @@ class _WidgetStyleSheetState extends State<_WidgetStyleSheet> {
     );
     if (result == null || result.files.isEmpty) return;
     final file = result.files.single;
-    final path = file.path;
-    final bytes =
-        file.bytes ?? (path == null ? null : await File(path).readAsBytes());
+    final bytes = await _readPickedFileBytes(file);
     if (bytes == null) return;
     setState(() => _savingIcon = true);
     final savedPath = await widget.controller.saveUploadedIcon(
-      bytes: Uint8List.fromList(bytes),
+      bytes: bytes,
       originalName: file.name,
     );
     if (!mounted) return;
@@ -1039,15 +1164,21 @@ class _WidgetStyleSheetState extends State<_WidgetStyleSheet> {
 
   Future<void> _save() async {
     final width = (double.tryParse(_width.text.trim()) ?? widget.initial.width)
-        .clamp(96, 720)
+        .clamp(
+          DashboardLayoutConstants.minCardWidth,
+          DashboardLayoutConstants.maxCardWidth,
+        )
         .toDouble();
     final height =
         (double.tryParse(_height.text.trim()) ?? widget.initial.height)
-            .clamp(80, 520)
+            .clamp(
+              DashboardLayoutConstants.minCardHeight,
+              DashboardLayoutConstants.maxCardHeight,
+            )
             .toDouble();
     final decimalDigits = (int.tryParse(_decimalDigits.text.trim()) ??
             widget.initial.decimalDigits)
-        .clamp(0, 6)
+        .clamp(0, DashboardLayoutConstants.maxDecimalDigits)
         .toInt();
     final updated = widget.initial.copyWith(
       title: _title.text.trim().isEmpty
@@ -1346,6 +1477,18 @@ void _openWidgetStyleEditor(
   );
 }
 
+Future<Uint8List?> _readPickedFileBytes(PlatformFile file) async {
+  if (file.bytes != null) return file.bytes;
+  final path = file.path;
+  if (path == null) return null;
+  return File(path).readAsBytes();
+}
+
+void _showSnackBar(BuildContext context, String message) {
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+}
+
 String _propertySubtitle(ThingProperty property) {
   return '${property.identifier} · ${property.rawType} · ${_accessModeLabel(property.accessMode)}';
 }
@@ -1414,6 +1557,5 @@ Color _logColor(LogLevel level) {
 }
 
 String _formatDateTime(DateTime time) {
-  String two(int value) => value.toString().padLeft(2, '0');
-  return '${time.year}-${two(time.month)}-${two(time.day)} ${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
+  return formatDateTime(time);
 }

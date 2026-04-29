@@ -23,4 +23,27 @@ void main() {
     expect(authorization, contains('method=sha1'));
     expect(authorization, contains('sign='));
   });
+
+  test('throws readable error for malformed access key', () {
+    const auth = OnenetAuth();
+
+    expect(
+      () => auth.generateAuthorization(
+        const ProjectConfig(
+          projectId: 'projectA',
+          groupId: 'groupB',
+          accessKey: 'not base64',
+          productId: 'productC',
+          deviceName: 'deviceD',
+        ),
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('AccessKey 格式错误'),
+        ),
+      ),
+    );
+  });
 }

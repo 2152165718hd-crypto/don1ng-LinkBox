@@ -2,6 +2,53 @@
 
 本项目按 `VERSIONING.md` 维护版本。每个版本必须说明版本定位、相较上一版的变化、迁移或兼容性影响、验证结果和发布产物状态。
 
+## v0.3.0 - 2026-04-29
+
+版本定位：连接稳定性、备份恢复和本地数据维护版本。
+
+相较 `v0.2.0`：这一版在可编辑仪表盘基础上补强运行可靠性，增加配置备份导入，切换 OneNET MQTT 到 TLS 连接，并加入运行数据/日志保留策略。
+
+新增：
+
+- 支持导入配置备份 JSON，可恢复项目配置、物模型、面板页面和控件配置。
+- 新增备份文件时间戳命名，避免多次导出互相覆盖。
+- 新增运行数据保留策略，根据历史天数清理过旧 runtime values，最低保留 30 天。
+- 新增日志数量上限，自动保留最近 1000 条日志。
+- 新增控制器级测试，覆盖物模型导入生成面板、控制下发和实时连接状态。
+- 新增时间格式化和仪表盘布局常量，减少重复格式化与硬编码布局值。
+
+变更：
+
+- OneNET MQTT 从明文 IP/端口切换到 `studio-mqtt.heclouds.com:8883` TLS 连接。
+- Android Manifest 移除 `usesCleartextTraffic`，默认不允许明文网络流量。
+- 初始设备状态改为离线，只有连接或生命周期消息确认后再更新。
+- 趋势图历史数据加载改为 stateful future，避免频繁 rebuild 时重复拉取历史数据。
+- 滑块控制在设备离线时禁用结束回调，控制完成后清理草稿值。
+- Token.log、物模型和备份导入统一处理 `file_picker` 的内存/路径读取。
+- OneNET AccessKey 非 Base64 时返回更明确的错误提示。
+- 物模型导入只把枚举 specs 解析为枚举值，字符串长度等 specs 不再误入枚举表。
+
+兼容性与迁移：
+
+- 无数据库 schema 版本升级。
+- 备份导入支持当前 schema 2 数据；导入时会保留已有安全存储中的 AccessKey，除非备份文件显式包含 `access_key`。
+- MQTT 连接依赖设备网络可访问 OneNET Studio TLS 地址与 8883 端口。
+
+验证：
+
+- `flutter pub get` 通过。
+- `dart format lib test` 通过。
+- `flutter analyze` 通过。
+- `flutter test` 通过。
+- `flutter build apk --release` 通过。
+
+发布产物：
+
+- GitHub Release：[v0.3.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.3.0)
+- 与上一版对比：[v0.2.0...v0.3.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/compare/v0.2.0...v0.3.0)
+- 本地 APK 归档：`build/app/outputs/versioned-apk/don1ng-LinkBox-v0.3.0-unsigned.apk`
+- 未附带 APK 到 GitHub Release，因为 Android release signing 尚未配置，未签名 APK 不作为正式 Release 附件发布。
+
 ## v0.2.0 - 2026-04-29
 
 版本定位：仪表盘自定义能力版本。

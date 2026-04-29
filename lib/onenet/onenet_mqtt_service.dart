@@ -69,6 +69,9 @@ class OnenetMqttService {
     OnenetAuth? auth,
   }) : _auth = auth ?? const OnenetAuth();
 
+  static const _mqttHost = 'studio-mqtt.heclouds.com';
+  static const _mqttTlsPort = 8883;
+
   final OnenetAuth _auth;
   final _messages = StreamController<OnenetRealtimeMessage>.broadcast();
   final _states = StreamController<OnenetMqttConnectionState>.broadcast();
@@ -81,8 +84,12 @@ class OnenetMqttService {
     await disconnect();
     _states.add(OnenetMqttConnectionState.connecting);
     final clientId = 'don1ng_linkbox_${DateTime.now().millisecondsSinceEpoch}';
-    final client =
-        MqttServerClient.withPort('183.230.102.116', clientId, 25002);
+    final client = MqttServerClient.withPort(
+      _mqttHost,
+      clientId,
+      _mqttTlsPort,
+    );
+    client.secure = true;
     client.keepAlivePeriod = 60;
     client.autoReconnect = true;
     client.resubscribeOnAutoReconnect = true;

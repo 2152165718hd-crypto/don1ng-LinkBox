@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 
 import '../storage/models.dart';
+import 'dashboard_constants.dart';
 
 class DashboardFactory {
   DashboardFactory({Uuid? uuid}) : _uuid = uuid ?? const Uuid();
@@ -51,8 +52,8 @@ class DashboardFactory {
             title: property.displayName,
             x: nextPosition.x,
             y: nextPosition.y,
-            width: 172,
-            height: 124,
+            width: DashboardLayoutConstants.defaultCardWidth,
+            height: DashboardLayoutConstants.defaultCardHeight,
             displayMode: mode,
             iconKind: DashboardIconKind.builtinPng,
             iconValue: defaultBuiltinIconKey(property),
@@ -70,10 +71,10 @@ class DashboardFactory {
             type: DashboardWidgetType.trendChart,
             propertyIdentifier: property.identifier,
             title: '${property.displayName}趋势',
-            x: 16,
+            x: DashboardLayoutConstants.defaultCardX,
             y: nextPosition.y,
-            width: 360,
-            height: 210,
+            width: DashboardLayoutConstants.defaultChartWidth,
+            height: DashboardLayoutConstants.defaultChartHeight,
             displayMode: DashboardDisplayMode.trendChart,
             iconKind: DashboardIconKind.builtinPng,
             iconValue: defaultBuiltinIconKey(property),
@@ -111,14 +112,23 @@ String defaultBuiltinIconKey(ThingProperty property) {
 }
 
 _DashboardPosition _nextPosition(List<DashboardWidgetConfig> widgets) {
-  if (widgets.isEmpty) return const _DashboardPosition(16, 16, 0);
+  if (widgets.isEmpty) {
+    return const _DashboardPosition(
+      DashboardLayoutConstants.defaultCardX,
+      DashboardLayoutConstants.defaultCardY,
+      0,
+    );
+  }
   final bottom = widgets.fold<double>(
-    16,
-    (current, item) => item.y + item.height + 16 > current
-        ? item.y + item.height + 16
+    DashboardLayoutConstants.defaultCardY,
+    (current, item) => item.y +
+                item.height +
+                DashboardLayoutConstants.canvasBorderPadding >
+            current
+        ? item.y + item.height + DashboardLayoutConstants.canvasBorderPadding
         : current,
   );
-  return _DashboardPosition(16, bottom, 0);
+  return _DashboardPosition(DashboardLayoutConstants.defaultCardX, bottom, 0);
 }
 
 class _DashboardPosition {
@@ -130,12 +140,26 @@ class _DashboardPosition {
 
   _DashboardPosition nextCard() {
     if (column == 0) {
-      return _DashboardPosition(204, y, 1);
+      return _DashboardPosition(
+        DashboardLayoutConstants.defaultCardX +
+            DashboardLayoutConstants.defaultCardWidth +
+            DashboardLayoutConstants.cardColumnGap,
+        y,
+        1,
+      );
     }
-    return _DashboardPosition(16, y + 144, 0);
+    return _DashboardPosition(
+      DashboardLayoutConstants.defaultCardX,
+      y + DashboardLayoutConstants.cardRowHeight,
+      0,
+    );
   }
 
   _DashboardPosition nextChart() {
-    return _DashboardPosition(16, y + 230, 0);
+    return _DashboardPosition(
+      DashboardLayoutConstants.defaultCardX,
+      y + DashboardLayoutConstants.chartRowHeight,
+      0,
+    );
   }
 }

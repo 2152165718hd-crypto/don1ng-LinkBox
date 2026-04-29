@@ -111,7 +111,8 @@ class ThingModelImporter {
       min: _parseNum(specs['min']),
       max: _parseNum(specs['max']),
       step: _parseNum(specs['step']),
-      enumValues: _parseEnumValues(specs),
+      enumValues:
+          type == ThingDataType.enumType ? _parseEnumValues(specs) : const {},
       rawType: rawType,
       required: item['required'] == true,
     );
@@ -168,13 +169,21 @@ class ThingModelImporter {
   }
 
   Map<String, String> _parseEnumValues(Map specs) {
+    const reservedKeys = {
+      'min',
+      'max',
+      'step',
+      'unit',
+      'length',
+      'minLength',
+      'maxLength',
+      'default',
+    };
     final enumMap = <String, String>{};
     for (final entry in specs.entries) {
       final key = entry.key.toString();
       final value = entry.value;
-      if (key == 'min' || key == 'max' || key == 'step' || key == 'unit') {
-        continue;
-      }
+      if (reservedKeys.contains(key)) continue;
       if (value is Map && value['name'] != null) {
         enumMap[key] = value['name'].toString();
       } else {

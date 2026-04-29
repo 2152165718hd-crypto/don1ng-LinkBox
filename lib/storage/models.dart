@@ -518,43 +518,34 @@ List<DashboardDisplayMode> compatibleDisplayModes(ThingProperty property) {
     }
     return modes;
   }
-  switch (property.type) {
-    case ThingDataType.boolType:
-      final modes = <DashboardDisplayMode>[
-        DashboardDisplayMode.status,
-        DashboardDisplayMode.value,
-      ];
-      if (property.writable) {
-        modes.insertAll(0, const [
-          DashboardDisplayMode.switcher,
-          DashboardDisplayMode.button,
-        ]);
-      }
-      return modes;
-    case ThingDataType.enumType:
-      final modes = <DashboardDisplayMode>[
-        DashboardDisplayMode.status,
-        DashboardDisplayMode.value,
-      ];
-      if (property.writable) {
-        modes.insert(0, DashboardDisplayMode.enumSelect);
-      }
-      return modes;
-    case ThingDataType.stringType:
-    case ThingDataType.struct:
-    case ThingDataType.bitmap:
-    case ThingDataType.unknown:
-      return const [
-        DashboardDisplayMode.text,
-        DashboardDisplayMode.status,
-        DashboardDisplayMode.value,
-      ];
-    case ThingDataType.int32:
-    case ThingDataType.int64:
-    case ThingDataType.float:
-    case ThingDataType.doubleType:
-      return const [DashboardDisplayMode.value];
+  if (property.type == ThingDataType.boolType) {
+    final modes = <DashboardDisplayMode>[
+      DashboardDisplayMode.status,
+      DashboardDisplayMode.value,
+    ];
+    if (property.writable) {
+      modes.insertAll(0, const [
+        DashboardDisplayMode.switcher,
+        DashboardDisplayMode.button,
+      ]);
+    }
+    return modes;
   }
+  if (property.type == ThingDataType.enumType) {
+    final modes = <DashboardDisplayMode>[
+      DashboardDisplayMode.status,
+      DashboardDisplayMode.value,
+    ];
+    if (property.writable) {
+      modes.insert(0, DashboardDisplayMode.enumSelect);
+    }
+    return modes;
+  }
+  return const [
+    DashboardDisplayMode.text,
+    DashboardDisplayMode.status,
+    DashboardDisplayMode.value,
+  ];
 }
 
 DashboardDisplayMode defaultDisplayModeFor(ThingProperty property) {

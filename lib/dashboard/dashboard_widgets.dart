@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
+import '../core/formatters.dart';
 import '../runtime/linkbox_controller.dart';
 import '../storage/models.dart';
 import 'icon_library.dart';
@@ -547,18 +548,22 @@ class _SliderControlState extends State<_SliderControl> {
           onChanged: widget.controller.state.deviceOnline
               ? (next) => setState(() => _draft = next)
               : null,
-          onChangeEnd: (next) async {
-            final controlValue = widget.property.type == ThingDataType.int32 ||
-                    widget.property.type == ThingDataType.int64
-                ? next.round()
-                : next;
-            final error = await widget.controller
-                .sendControl(widget.property, controlValue);
-            if (error != null && context.mounted) {
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(SnackBar(content: Text(error)));
-            }
-          },
+          onChangeEnd: widget.controller.state.deviceOnline
+              ? (next) async {
+                  final controlValue =
+                      widget.property.type == ThingDataType.int32 ||
+                              widget.property.type == ThingDataType.int64
+                          ? next.round()
+                          : next;
+                  final error = await widget.controller
+                      .sendControl(widget.property, controlValue);
+                  if (mounted) setState(() => _draft = null);
+                  if (error != null && context.mounted) {
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(SnackBar(content: Text(error)));
+                  }
+                }
+              : null,
         ),
       ],
     );
@@ -620,7 +625,7 @@ class _EnumControl extends StatelessWidget {
   }
 }
 
-class _TrendChart extends StatelessWidget {
+class _TrendChart extends StatefulWidget {
   const _TrendChart({
     required this.config,
     required this.property,
@@ -632,9 +637,37 @@ class _TrendChart extends StatelessWidget {
   final LinkBoxController controller;
 
   @override
+  State<_TrendChart> createState() => _TrendChartState();
+}
+
+class _TrendChartState extends State<_TrendChart> {
+  late Future<List<RuntimeValue>> _historyFuture;
+  late int _historyDays;
+
+  @override
+  void initState() {
+    super.initState();
+    _historyDays = widget.controller.state.config.historyDays;
+    _historyFuture = widget.controller.loadHistory(widget.property);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TrendChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextHistoryDays = widget.controller.state.config.historyDays;
+    final shouldReload = oldWidget.controller != widget.controller ||
+        oldWidget.property.identifier != widget.property.identifier ||
+        _historyDays != nextHistoryDays;
+    if (shouldReload) {
+      _historyDays = nextHistoryDays;
+      _historyFuture = widget.controller.loadHistory(widget.property);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<RuntimeValue>>(
-      future: controller.loadHistory(property),
+      future: _historyFuture,
       builder: (context, snapshot) {
         final values = snapshot.data ?? const [];
         final spots = <FlSpot>[];
@@ -645,7 +678,7 @@ class _TrendChart extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _TileHeader(config: config, property: property),
+            _TileHeader(config: widget.config, property: widget.property),
             const SizedBox(height: 10),
             Expanded(
               child: spots.isEmpty
@@ -654,7 +687,8 @@ class _TrendChart extends StatelessWidget {
                         snapshot.connectionState == ConnectionState.waiting
                             ? '加载中'
                             : '暂无历史数据',
-                        style: TextStyle(color: _subtleTextColor(config)),
+                        style:
+                            TextStyle(color: _subtleTextColor(widget.config)),
                       ),
                     )
                   : LineChart(
@@ -747,6 +781,5 @@ String _formatDisplayValue(
 }
 
 String _formatTime(DateTime time) {
-  String two(int value) => value.toString().padLeft(2, '0');
-  return '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
+  return formatClockTime(time);
 }
