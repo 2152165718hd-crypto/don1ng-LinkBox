@@ -10,6 +10,12 @@ don1ng LinkBox 是一个 Flutter Android 应用，用于把 OneNET Studio 物模
 - 应用版本：`0.2.0+2`
 - Release 页面：[don1ng LinkBox v0.2.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.2.0)
 - 状态：Android MVP，可运行源码版本；正式签名 APK 尚未配置发布。
+- 更新日志：[CHANGELOG.md](CHANGELOG.md)
+- 版本管理规范：[VERSIONING.md](VERSIONING.md)
+
+## 版本管理
+
+每个正式版本都必须同步维护 Git tag、`pubspec.yaml`、`CHANGELOG.md` 和 GitHub Release 说明。新版 Release notes 需要说明相较上一版的新增、变更、修复、迁移影响、验证结果和发布产物状态。
 
 ## 功能特性
 
