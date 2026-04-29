@@ -26,6 +26,26 @@ enum DashboardWidgetType {
   textLabel,
 }
 
+enum DashboardDisplayMode {
+  value,
+  progress,
+  slider,
+  gauge,
+  switcher,
+  button,
+  enumSelect,
+  status,
+  text,
+  trendChart,
+}
+
+enum DashboardIconKind {
+  none,
+  material,
+  builtinPng,
+  uploadedPng,
+}
+
 enum LogLevel { info, warning, error }
 
 class ProjectConfig {
@@ -59,8 +79,9 @@ class ProjectConfig {
   }
 
   bool get isReady {
-    final hasAuthScope =
-        authMode == AuthMode.user ? userId.trim().isNotEmpty : groupId.trim().isNotEmpty;
+    final hasAuthScope = authMode == AuthMode.user
+        ? userId.trim().isNotEmpty
+        : groupId.trim().isNotEmpty;
     return projectId.trim().isNotEmpty &&
         hasAuthScope &&
         accessKey.trim().isNotEmpty &&
@@ -122,7 +143,8 @@ class ProjectConfig {
     };
   }
 
-  factory ProjectConfig.fromMap(Map<String, Object?> map, {String accessKey = ''}) {
+  factory ProjectConfig.fromMap(Map<String, Object?> map,
+      {String accessKey = ''}) {
     return ProjectConfig(
       projectId: map['project_id'] as String? ?? '',
       groupId: map['group_id'] as String? ?? '',
@@ -179,8 +201,10 @@ class ThingProperty {
   final String rawType;
   final bool required;
 
-  bool get readable => accessMode == AccessMode.readOnly || accessMode == AccessMode.readWrite;
-  bool get writable => accessMode == AccessMode.writeOnly || accessMode == AccessMode.readWrite;
+  bool get readable =>
+      accessMode == AccessMode.readOnly || accessMode == AccessMode.readWrite;
+  bool get writable =>
+      accessMode == AccessMode.writeOnly || accessMode == AccessMode.readWrite;
 
   bool get isNumeric {
     return type == ThingDataType.int32 ||
@@ -241,7 +265,8 @@ class ThingProperty {
       max: map['max_value'] as num?,
       step: map['step_value'] as num?,
       enumValues: decoded is Map
-          ? decoded.map((key, value) => MapEntry(key.toString(), value.toString()))
+          ? decoded
+              .map((key, value) => MapEntry(key.toString(), value.toString()))
           : const {},
       rawType: map['raw_type'] as String? ?? '',
       required: (map['is_required'] as int? ?? 0) == 1,
@@ -288,6 +313,13 @@ class DashboardWidgetConfig {
     required this.y,
     required this.width,
     required this.height,
+    required this.displayMode,
+    this.iconKind = DashboardIconKind.material,
+    this.iconValue = '',
+    this.showUnit = true,
+    this.decimalDigits = 1,
+    this.backgroundColor = 0xFFFFFFFF,
+    this.textColor = 0xFF101828,
   });
 
   final String id;
@@ -299,6 +331,15 @@ class DashboardWidgetConfig {
   final double y;
   final double width;
   final double height;
+  final DashboardDisplayMode displayMode;
+  final DashboardIconKind iconKind;
+  final String iconValue;
+  final bool showUnit;
+  final int decimalDigits;
+  final int backgroundColor;
+  final int textColor;
+
+  bool get isTrend => displayMode == DashboardDisplayMode.trendChart;
 
   DashboardWidgetConfig copyWith({
     String? id,
@@ -310,6 +351,13 @@ class DashboardWidgetConfig {
     double? y,
     double? width,
     double? height,
+    DashboardDisplayMode? displayMode,
+    DashboardIconKind? iconKind,
+    String? iconValue,
+    bool? showUnit,
+    int? decimalDigits,
+    int? backgroundColor,
+    int? textColor,
   }) {
     return DashboardWidgetConfig(
       id: id ?? this.id,
@@ -321,6 +369,13 @@ class DashboardWidgetConfig {
       y: y ?? this.y,
       width: width ?? this.width,
       height: height ?? this.height,
+      displayMode: displayMode ?? this.displayMode,
+      iconKind: iconKind ?? this.iconKind,
+      iconValue: iconValue ?? this.iconValue,
+      showUnit: showUnit ?? this.showUnit,
+      decimalDigits: decimalDigits ?? this.decimalDigits,
+      backgroundColor: backgroundColor ?? this.backgroundColor,
+      textColor: textColor ?? this.textColor,
     );
   }
 
@@ -335,23 +390,50 @@ class DashboardWidgetConfig {
       'y': y,
       'width': width,
       'height': height,
+      'display_mode': displayMode.name,
+      'icon_kind': iconKind.name,
+      'icon_value': iconValue,
+      'show_unit': showUnit ? 1 : 0,
+      'decimal_digits': decimalDigits,
+      'background_color': backgroundColor,
+      'text_color': textColor,
     };
   }
 
+  Map<String, Object?> toExportMap() => toDbMap();
+
   factory DashboardWidgetConfig.fromMap(Map<String, Object?> map) {
+    final type = _enumFromName(
+      DashboardWidgetType.values,
+      map['type'] as String?,
+      DashboardWidgetType.valueCard,
+    );
+    final displayMode = _enumFromName(
+      DashboardDisplayMode.values,
+      map['display_mode'] as String?,
+      _legacyDisplayMode(type),
+    );
     return DashboardWidgetConfig(
       id: map['id'] as String? ?? '',
       pageId: map['page_id'] as String? ?? '',
-      type: DashboardWidgetType.values.firstWhere(
-        (type) => type.name == (map['type'] as String? ?? ''),
-        orElse: () => DashboardWidgetType.valueCard,
-      ),
+      type: type,
       propertyIdentifier: map['property_identifier'] as String? ?? '',
       title: map['title'] as String? ?? '',
       x: (map['x'] as num? ?? 0).toDouble(),
       y: (map['y'] as num? ?? 0).toDouble(),
       width: (map['width'] as num? ?? 180).toDouble(),
       height: (map['height'] as num? ?? 110).toDouble(),
+      displayMode: displayMode,
+      iconKind: _enumFromName(
+        DashboardIconKind.values,
+        map['icon_kind'] as String?,
+        DashboardIconKind.material,
+      ),
+      iconValue: map['icon_value'] as String? ?? '',
+      showUnit: (map['show_unit'] as int? ?? 1) == 1,
+      decimalDigits: (map['decimal_digits'] as int? ?? 1).clamp(0, 6).toInt(),
+      backgroundColor: (map['background_color'] as int?) ?? 0xFFFFFFFF,
+      textColor: (map['text_color'] as int?) ?? 0xFF101828,
     );
   }
 }
@@ -413,13 +495,125 @@ class AppLogEntry {
   factory AppLogEntry.fromMap(Map<String, Object?> map) {
     return AppLogEntry(
       time: DateTime.fromMillisecondsSinceEpoch(map['time'] as int? ?? 0),
-      level: LogLevel.values.firstWhere(
-        (level) => level.name == (map['level'] as String? ?? ''),
-        orElse: () => LogLevel.info,
-      ),
+      level: _enumFromName(
+          LogLevel.values, map['level'] as String?, LogLevel.info),
       type: map['type'] as String? ?? '',
       message: map['message'] as String? ?? '',
       detail: map['detail'] as String? ?? '',
     );
   }
+}
+
+List<DashboardDisplayMode> compatibleDisplayModes(ThingProperty property) {
+  if (property.isNumeric) {
+    final modes = <DashboardDisplayMode>[
+      DashboardDisplayMode.value,
+      DashboardDisplayMode.progress,
+      DashboardDisplayMode.gauge,
+      DashboardDisplayMode.trendChart,
+      DashboardDisplayMode.status,
+    ];
+    if (property.writable) {
+      modes.insert(2, DashboardDisplayMode.slider);
+    }
+    return modes;
+  }
+  switch (property.type) {
+    case ThingDataType.boolType:
+      final modes = <DashboardDisplayMode>[
+        DashboardDisplayMode.status,
+        DashboardDisplayMode.value,
+      ];
+      if (property.writable) {
+        modes.insertAll(0, const [
+          DashboardDisplayMode.switcher,
+          DashboardDisplayMode.button,
+        ]);
+      }
+      return modes;
+    case ThingDataType.enumType:
+      final modes = <DashboardDisplayMode>[
+        DashboardDisplayMode.status,
+        DashboardDisplayMode.value,
+      ];
+      if (property.writable) {
+        modes.insert(0, DashboardDisplayMode.enumSelect);
+      }
+      return modes;
+    case ThingDataType.stringType:
+    case ThingDataType.struct:
+    case ThingDataType.bitmap:
+    case ThingDataType.unknown:
+      return const [
+        DashboardDisplayMode.text,
+        DashboardDisplayMode.status,
+        DashboardDisplayMode.value,
+      ];
+    case ThingDataType.int32:
+    case ThingDataType.int64:
+    case ThingDataType.float:
+    case ThingDataType.doubleType:
+      return const [DashboardDisplayMode.value];
+  }
+}
+
+DashboardDisplayMode defaultDisplayModeFor(ThingProperty property) {
+  if (property.type == ThingDataType.boolType && property.writable) {
+    return DashboardDisplayMode.switcher;
+  }
+  if (property.type == ThingDataType.enumType && property.writable) {
+    return DashboardDisplayMode.enumSelect;
+  }
+  if (property.isNumeric && property.writable) {
+    return DashboardDisplayMode.slider;
+  }
+  if (property.type == ThingDataType.stringType) {
+    return DashboardDisplayMode.text;
+  }
+  return DashboardDisplayMode.value;
+}
+
+DashboardWidgetType widgetTypeForDisplayMode(DashboardDisplayMode mode) {
+  switch (mode) {
+    case DashboardDisplayMode.slider:
+      return DashboardWidgetType.slider;
+    case DashboardDisplayMode.switcher:
+    case DashboardDisplayMode.button:
+      return DashboardWidgetType.switchControl;
+    case DashboardDisplayMode.enumSelect:
+      return DashboardWidgetType.enumSelect;
+    case DashboardDisplayMode.trendChart:
+      return DashboardWidgetType.trendChart;
+    case DashboardDisplayMode.text:
+      return DashboardWidgetType.textLabel;
+    case DashboardDisplayMode.value:
+    case DashboardDisplayMode.progress:
+    case DashboardDisplayMode.gauge:
+    case DashboardDisplayMode.status:
+      return DashboardWidgetType.valueCard;
+  }
+}
+
+DashboardDisplayMode _legacyDisplayMode(DashboardWidgetType type) {
+  switch (type) {
+    case DashboardWidgetType.switchControl:
+      return DashboardDisplayMode.switcher;
+    case DashboardWidgetType.slider:
+      return DashboardDisplayMode.slider;
+    case DashboardWidgetType.enumSelect:
+      return DashboardDisplayMode.enumSelect;
+    case DashboardWidgetType.trendChart:
+      return DashboardDisplayMode.trendChart;
+    case DashboardWidgetType.textLabel:
+      return DashboardDisplayMode.text;
+    case DashboardWidgetType.valueCard:
+      return DashboardDisplayMode.value;
+  }
+}
+
+T _enumFromName<T extends Enum>(List<T> values, String? name, T fallback) {
+  for (final value in values) {
+    if (value.name == name) return value;
+  }
+  return fallback;
 }

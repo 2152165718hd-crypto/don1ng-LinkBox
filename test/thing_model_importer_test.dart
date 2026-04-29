@@ -29,10 +29,12 @@ void main() {
       ],
     });
 
-    final result = await ThingModelImporter().importBytes(Uint8List.fromList(utf8.encode(jsonText)));
+    final result = await ThingModelImporter()
+        .importBytes(Uint8List.fromList(utf8.encode(jsonText)));
 
     expect(result.properties, hasLength(1));
     expect(result.properties.first.identifier, 'Temp');
+    expect(result.properties.first.name, '温度');
     expect(result.properties.first.type, ThingDataType.int32);
     expect(result.properties.first.accessMode, AccessMode.readWrite);
     expect(result.skipped, hasLength(1));

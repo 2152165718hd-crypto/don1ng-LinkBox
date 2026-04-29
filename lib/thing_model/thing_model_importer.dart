@@ -44,7 +44,8 @@ class ThingModelImporter {
 
     for (final item in propertiesNode) {
       if (item is! Map) {
-        skipped.add(const ThingModelSkippedItem(identifier: '-', reason: '属性节点不是对象'));
+        skipped.add(
+            const ThingModelSkippedItem(identifier: '-', reason: '属性节点不是对象'));
         continue;
       }
       final identifier = item['identifier']?.toString().trim() ?? '';
@@ -60,7 +61,7 @@ class ThingModelImporter {
       }
     }
 
-    if (text.contains('锛') || text.contains('�')) {
+    if (text.contains('�') || text.contains('锟')) {
       warnings.add('检测到疑似乱码字符，请确认物模型文件是 OneNET 导出的 UTF-8 JSON。');
     }
 
@@ -75,7 +76,7 @@ class ThingModelImporter {
     try {
       return utf8.decode(bytes);
     } on FormatException {
-      warnings.add('文件不是标准 UTF-8，已用容错解码；如中文异常，请从 OneNET 重新导出 UTF-8 JSON。');
+      warnings.add('文件不是标准 UTF-8，已使用容错解码；如果中文异常，请从 OneNET 重新导出 UTF-8 JSON。');
       return utf8.decode(bytes, allowMalformed: true);
     }
   }
@@ -93,10 +94,11 @@ class ThingModelImporter {
       throw const FormatException('缺少 dataType 对象');
     }
     final rawType = dataTypeNode['type']?.toString() ?? '';
-    final specs = dataTypeNode['specs'] is Map ? dataTypeNode['specs'] as Map : const {};
+    final specs =
+        dataTypeNode['specs'] is Map ? dataTypeNode['specs'] as Map : const {};
     final type = _mapType(rawType);
     if (type == ThingDataType.unknown) {
-      throw FormatException('暂不支持的数据类型: $rawType');
+      throw FormatException('暂不支持的数据类型 $rawType');
     }
 
     return ThingProperty(
@@ -170,7 +172,9 @@ class ThingModelImporter {
     for (final entry in specs.entries) {
       final key = entry.key.toString();
       final value = entry.value;
-      if (key == 'min' || key == 'max' || key == 'step' || key == 'unit') continue;
+      if (key == 'min' || key == 'max' || key == 'step' || key == 'unit') {
+        continue;
+      }
       if (value is Map && value['name'] != null) {
         enumMap[key] = value['name'].toString();
       } else {

@@ -23,7 +23,8 @@ class ValueValidationResult {
 class ThingValueValidator {
   const ThingValueValidator();
 
-  ValueValidationResult validateForControl(ThingProperty property, Object? rawValue) {
+  ValueValidationResult validateForControl(
+      ThingProperty property, Object? rawValue) {
     if (!property.writable) {
       return ValueValidationResult.fail('${property.displayName} 是只读属性，不能下发控制');
     }
@@ -48,14 +49,24 @@ class ThingValueValidator {
   }
 
   ValueValidationResult _validateInt(ThingProperty property, Object? rawValue) {
-    final value = rawValue is int ? rawValue : int.tryParse(rawValue?.toString() ?? '');
-    if (value == null) return const ValueValidationResult(isValid: false, value: null, message: '请输入整数');
+    final value =
+        rawValue is int ? rawValue : int.tryParse(rawValue?.toString() ?? '');
+    if (value == null) {
+      return const ValueValidationResult(
+          isValid: false, value: null, message: '请输入整数');
+    }
     return _validateRange(property, value);
   }
 
-  ValueValidationResult _validateDouble(ThingProperty property, Object? rawValue) {
-    final value = rawValue is num ? rawValue.toDouble() : double.tryParse(rawValue?.toString() ?? '');
-    if (value == null) return const ValueValidationResult(isValid: false, value: null, message: '请输入数字');
+  ValueValidationResult _validateDouble(
+      ThingProperty property, Object? rawValue) {
+    final value = rawValue is num
+        ? rawValue.toDouble()
+        : double.tryParse(rawValue?.toString() ?? '');
+    if (value == null) {
+      return const ValueValidationResult(
+          isValid: false, value: null, message: '请输入数字');
+    }
     return _validateRange(property, value);
   }
 
@@ -72,16 +83,22 @@ class ThingValueValidator {
   ValueValidationResult _validateBool(Object? rawValue) {
     if (rawValue is bool) return ValueValidationResult.ok(rawValue);
     final text = rawValue?.toString().toLowerCase().trim();
-    if (text == 'true' || text == '1' || text == 'on') return ValueValidationResult.ok(true);
-    if (text == 'false' || text == '0' || text == 'off') return ValueValidationResult.ok(false);
+    if (text == 'true' || text == '1' || text == 'on') {
+      return ValueValidationResult.ok(true);
+    }
+    if (text == 'false' || text == '0' || text == 'off') {
+      return ValueValidationResult.ok(false);
+    }
     return ValueValidationResult.fail('请输入布尔值 true/false');
   }
 
-  ValueValidationResult _validateEnum(ThingProperty property, Object? rawValue) {
+  ValueValidationResult _validateEnum(
+      ThingProperty property, Object? rawValue) {
     final value = rawValue?.toString() ?? '';
     if (property.enumValues.isEmpty || property.enumValues.containsKey(value)) {
       return ValueValidationResult.ok(value);
     }
-    return ValueValidationResult.fail('枚举值必须是: ${property.enumValues.keys.join(', ')}');
+    return ValueValidationResult.fail(
+        '枚举值必须是: ${property.enumValues.keys.join(', ')}');
   }
 }

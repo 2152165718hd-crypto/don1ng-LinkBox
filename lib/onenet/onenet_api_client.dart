@@ -45,13 +45,16 @@ class OnenetApiClient {
       },
     );
     final list = _readDataList(payload);
-    return list.map((item) {
-      return RuntimeValue(
-        identifier: item['identifier']?.toString() ?? '',
-        value: _decodeJsonLike(item['value']),
-        time: _parseMillis(item['time']),
-      );
-    }).where((item) => item.identifier.isNotEmpty).toList();
+    return list
+        .map((item) {
+          return RuntimeValue(
+            identifier: item['identifier']?.toString() ?? '',
+            value: _decodeJsonLike(item['value']),
+            time: _parseMillis(item['time']),
+          );
+        })
+        .where((item) => item.identifier.isNotEmpty)
+        .toList();
   }
 
   Future<List<RuntimeValue>> queryHistory({
@@ -151,10 +154,14 @@ class OnenetApiClient {
 
   Map<String, Object?> _asMap(Object? data) {
     if (data is Map<String, Object?>) return data;
-    if (data is Map) return data.map((key, value) => MapEntry(key.toString(), value));
+    if (data is Map) {
+      return data.map((key, value) => MapEntry(key.toString(), value));
+    }
     if (data is String && data.isNotEmpty) {
       final decoded = jsonDecode(data);
-      if (decoded is Map) return decoded.map((key, value) => MapEntry(key.toString(), value));
+      if (decoded is Map) {
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
+      }
     }
     return <String, Object?>{};
   }
@@ -164,7 +171,8 @@ class OnenetApiClient {
     if (data is Map && data['list'] is List) {
       return (data['list'] as List)
           .whereType<Map>()
-          .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
+          .map((item) =>
+              item.map((key, value) => MapEntry(key.toString(), value)))
           .toList();
     }
     return const [];
@@ -182,7 +190,8 @@ class OnenetApiClient {
   }
 
   DateTime _parseMillis(Object? raw) {
-    final millis = int.tryParse(raw?.toString() ?? '') ?? DateTime.now().millisecondsSinceEpoch;
+    final millis = int.tryParse(raw?.toString() ?? '') ??
+        DateTime.now().millisecondsSinceEpoch;
     return DateTime.fromMillisecondsSinceEpoch(millis);
   }
 }

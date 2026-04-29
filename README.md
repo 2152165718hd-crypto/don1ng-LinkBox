@@ -6,9 +6,9 @@ don1ng LinkBox 是一个 Flutter Android 应用，用于把 OneNET Studio 物模
 
 ## 当前版本
 
-- 最新版本：`v0.1.0`
-- 应用版本：`0.1.0+1`
-- Release 页面：[don1ng LinkBox v0.1.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.1.0)
+- 最新版本：`v0.2.0`
+- 应用版本：`0.2.0+2`
+- Release 页面：[don1ng LinkBox v0.2.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.2.0)
 - 状态：Android MVP，可运行源码版本；正式签名 APK 尚未配置发布。
 
 ## 功能特性
@@ -18,8 +18,10 @@ don1ng LinkBox 是一个 Flutter Android 应用，用于把 OneNET Studio 物模
 - 应用 MQTT 长连接：订阅生命周期、属性上报、事件上报、属性设置响应。
 - OneNET TSL JSON 导入：提取 `identifier`、`name`、`dataType`、`specs`、`accessMode`，异常属性会跳过并生成导入报告。
 - Token.log 识别：可自动带出 `Product ID` 和 `Device Name`，不会把设备 `DeviceKey` 当作 App 的 `AccessKey`。
-- 毕设高频物模型模板：温湿度、烟雾、人体红外、光照、超声波、继电器、LED、电机。
-- 自动生成默认面板：数值卡、开关、滑块、枚举选择、趋势图。
+- 自动生成默认面板：数值卡、进度条、仪表盘、开关、按钮、滑块、枚举选择、状态文本、趋势图。
+- 可编辑 UI 卡片：支持显示模式、尺寸、颜色、单位显示、小数位和图标配置。
+- 内置 IoT PNG 图标库：温度、湿度、光照、烟雾、距离、开关、继电器、电机、设备。
+- 支持上传 PNG 作为单个控件图标。
 - 运行页：实时数据刷新、控制下发前校验、离线拦截、历史曲线。
 - 本地日志和配置导出，导出默认不包含密钥。
 - 品牌启动图、应用封面和 Android launcher icon。
@@ -117,4 +119,4 @@ flutter test
 - 仅面向 Android；iOS 后台连接策略未处理。
 - 仅支持 OneNET Studio 物模型，不支持旧版数据流/数据点产品。
 - Release 暂未附带正式签名 APK。
-- 自定义图片上传、素材矢量图库完整管理、配置加密导出属于后续版本范围。
+- 素材矢量图库完整管理、配置加密导出属于后续版本范围。

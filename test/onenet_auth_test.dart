@@ -17,7 +17,8 @@ void main() {
     );
 
     expect(authorization, contains('version=2020-05-29'));
-    expect(authorization, contains('res=projectid%2FprojectA%2Fgroupid%2FgroupB'));
+    expect(
+        authorization, contains('res=projectid%2FprojectA%2Fgroupid%2FgroupB'));
     expect(authorization, contains('et=1700000060'));
     expect(authorization, contains('method=sha1'));
     expect(authorization, contains('sign='));

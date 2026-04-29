@@ -9,7 +9,13 @@ import 'onenet_auth.dart';
 
 enum OnenetMqttConnectionState { disconnected, connecting, connected, failed }
 
-enum OnenetRealtimeMessageType { lifecycle, property, event, propertySetReply, unknown }
+enum OnenetRealtimeMessageType {
+  lifecycle,
+  property,
+  event,
+  propertySetReply,
+  unknown
+}
 
 class OnenetRealtimeMessage {
   const OnenetRealtimeMessage({
@@ -75,7 +81,8 @@ class OnenetMqttService {
     await disconnect();
     _states.add(OnenetMqttConnectionState.connecting);
     final clientId = 'don1ng_linkbox_${DateTime.now().millisecondsSinceEpoch}';
-    final client = MqttServerClient.withPort('183.230.102.116', clientId, 25002);
+    final client =
+        MqttServerClient.withPort('183.230.102.116', clientId, 25002);
     client.keepAlivePeriod = 60;
     client.autoReconnect = true;
     client.resubscribeOnAutoReconnect = true;
@@ -87,8 +94,10 @@ class OnenetMqttService {
     client.onDisconnected = () {
       _states.add(OnenetMqttConnectionState.disconnected);
     };
-    client.onAutoReconnect = () => _states.add(OnenetMqttConnectionState.connecting);
-    client.onAutoReconnected = () => _states.add(OnenetMqttConnectionState.connected);
+    client.onAutoReconnect =
+        () => _states.add(OnenetMqttConnectionState.connecting);
+    client.onAutoReconnected =
+        () => _states.add(OnenetMqttConnectionState.connected);
     client.connectionMessage = MqttConnectMessage()
         .withClientIdentifier(clientId)
         .authenticateAs(config.resource, _auth.generateAuthorization(config))
@@ -128,7 +137,8 @@ class OnenetMqttService {
     for (final update in updates) {
       final message = update.payload;
       if (message is! MqttPublishMessage) continue;
-      final payloadText = MqttPublishPayload.bytesToStringAsString(message.payload.message);
+      final payloadText =
+          MqttPublishPayload.bytesToStringAsString(message.payload.message);
       final decoded = _decodePayload(payloadText);
       _messages.add(
         OnenetRealtimeMessage(
@@ -154,8 +164,12 @@ class OnenetMqttService {
   }
 
   OnenetRealtimeMessageType _typeFromTopic(String topic) {
-    if (topic.endsWith('/thing/lifecycle')) return OnenetRealtimeMessageType.lifecycle;
-    if (topic.endsWith('/thing/property')) return OnenetRealtimeMessageType.property;
+    if (topic.endsWith('/thing/lifecycle')) {
+      return OnenetRealtimeMessageType.lifecycle;
+    }
+    if (topic.endsWith('/thing/property')) {
+      return OnenetRealtimeMessageType.property;
+    }
     if (topic.endsWith('/thing/event')) return OnenetRealtimeMessageType.event;
     if (topic.endsWith('/thing/property/set/reply')) {
       return OnenetRealtimeMessageType.propertySetReply;

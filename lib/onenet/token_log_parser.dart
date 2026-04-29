@@ -32,17 +32,22 @@ class TokenLogParser {
     }
 
     final res = fields['res'] ?? _tokenParam(fields['token'], 'res');
-    final match = RegExp(r'products/([^/]+)/devices/(.+)$').firstMatch(Uri.decodeComponent(res));
+    final match = RegExp(r'products/([^/]+)/devices/(.+)$')
+        .firstMatch(Uri.decodeComponent(res));
     if (match == null) {
-      throw const FormatException('Token.log 中未找到 res: products/{ProductID}/devices/{DeviceName}');
+      throw const FormatException(
+          'Token.log 中未找到 res: products/{ProductID}/devices/{DeviceName}');
     }
-    final expires = int.tryParse(fields['et'] ?? _tokenParam(fields['token'], 'et'));
+    final expires =
+        int.tryParse(fields['et'] ?? _tokenParam(fields['token'], 'et'));
     return TokenLogInfo(
       productId: match.group(1) ?? '',
       deviceName: match.group(2) ?? '',
       deviceKey: fields['key'] ?? '',
       token: fields['token'] ?? '',
-      expiresAt: expires == null ? null : DateTime.fromMillisecondsSinceEpoch(expires * 1000),
+      expiresAt: expires == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(expires * 1000),
     );
   }
 

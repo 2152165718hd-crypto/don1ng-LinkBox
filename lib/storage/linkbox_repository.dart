@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as p;
@@ -23,8 +24,9 @@ class LinkBoxRepository {
     final dbPath = p.join(dir.path, 'don1ng_linkbox.db');
     _db = await openDatabase(
       dbPath,
-      version: 1,
+      version: 2,
       onCreate: _createSchema,
+      onUpgrade: _upgradeSchema,
     );
     return _db!;
   }
@@ -67,19 +69,7 @@ class LinkBoxRepository {
         order_index INTEGER NOT NULL
       )
     ''');
-    await db.execute('''
-      CREATE TABLE dashboard_widgets (
-        id TEXT PRIMARY KEY,
-        page_id TEXT NOT NULL,
-        type TEXT NOT NULL,
-        property_identifier TEXT NOT NULL,
-        title TEXT NOT NULL,
-        x REAL NOT NULL,
-        y REAL NOT NULL,
-        width REAL NOT NULL,
-        height REAL NOT NULL
-      )
-    ''');
+    await db.execute(_dashboardWidgetsSchema);
     await db.execute('''
       CREATE TABLE runtime_values (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,7 +78,8 @@ class LinkBoxRepository {
         time INTEGER NOT NULL
       )
     ''');
-    await db.execute('CREATE INDEX idx_runtime_values_identifier_time ON runtime_values(identifier, time)');
+    await db.execute(
+        'CREATE INDEX idx_runtime_values_identifier_time ON runtime_values(identifier, time)');
     await db.execute('''
       CREATE TABLE app_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,17 +92,94 @@ class LinkBoxRepository {
     ''');
   }
 
+  Future<void> _upgradeSchema(
+      Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await _addColumnIfMissing(db, 'dashboard_widgets', 'display_mode',
+          "TEXT NOT NULL DEFAULT 'value'");
+      await _addColumnIfMissing(db, 'dashboard_widgets', 'icon_kind',
+          "TEXT NOT NULL DEFAULT 'material'");
+      await _addColumnIfMissing(
+          db, 'dashboard_widgets', 'icon_value', "TEXT NOT NULL DEFAULT ''");
+      await _addColumnIfMissing(
+          db, 'dashboard_widgets', 'show_unit', 'INTEGER NOT NULL DEFAULT 1');
+      await _addColumnIfMissing(db, 'dashboard_widgets', 'decimal_digits',
+          'INTEGER NOT NULL DEFAULT 1');
+      await _addColumnIfMissing(
+        db,
+        'dashboard_widgets',
+        'background_color',
+        'INTEGER NOT NULL DEFAULT 4294967295',
+      );
+      await _addColumnIfMissing(
+        db,
+        'dashboard_widgets',
+        'text_color',
+        'INTEGER NOT NULL DEFAULT 4279242760',
+      );
+      await db.execute('''
+        UPDATE dashboard_widgets
+        SET display_mode = CASE type
+          WHEN 'switchControl' THEN 'switcher'
+          WHEN 'slider' THEN 'slider'
+          WHEN 'enumSelect' THEN 'enumSelect'
+          WHEN 'trendChart' THEN 'trendChart'
+          WHEN 'textLabel' THEN 'text'
+          ELSE 'value'
+        END
+      ''');
+    }
+  }
+
+  static const _dashboardWidgetsSchema = '''
+      CREATE TABLE dashboard_widgets (
+        id TEXT PRIMARY KEY,
+        page_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        property_identifier TEXT NOT NULL,
+        title TEXT NOT NULL,
+        x REAL NOT NULL,
+        y REAL NOT NULL,
+        width REAL NOT NULL,
+        height REAL NOT NULL,
+        display_mode TEXT NOT NULL,
+        icon_kind TEXT NOT NULL,
+        icon_value TEXT NOT NULL,
+        show_unit INTEGER NOT NULL,
+        decimal_digits INTEGER NOT NULL,
+        background_color INTEGER NOT NULL,
+        text_color INTEGER NOT NULL
+      )
+    ''';
+
+  Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    final exists = columns.any((item) => item['name'] == column);
+    if (!exists) {
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
+    }
+  }
+
   Future<ProjectConfig> loadConfig() async {
     final db = await database;
     final rows = await db.query('project_config', limit: 1);
-    final accessKey = await _secureStorage.read(key: _accessKeyStorageKey) ?? '';
-    if (rows.isEmpty) return ProjectConfig.empty().copyWith(accessKey: accessKey);
+    final accessKey =
+        await _secureStorage.read(key: _accessKeyStorageKey) ?? '';
+    if (rows.isEmpty) {
+      return ProjectConfig.empty().copyWith(accessKey: accessKey);
+    }
     return ProjectConfig.fromMap(rows.first, accessKey: accessKey);
   }
 
   Future<void> saveConfig(ProjectConfig config) async {
     final db = await database;
-    await _secureStorage.write(key: _accessKeyStorageKey, value: config.accessKey);
+    await _secureStorage.write(
+        key: _accessKeyStorageKey, value: config.accessKey);
     await db.insert(
       'project_config',
       config.toDbMap(includeSecret: false),
@@ -150,8 +218,10 @@ class LinkBoxRepository {
 
   Future<void> deleteProperty(String identifier) async {
     final db = await database;
-    await db.delete('thing_properties', where: 'identifier = ?', whereArgs: [identifier]);
-    await db.delete('dashboard_widgets', where: 'property_identifier = ?', whereArgs: [identifier]);
+    await db.delete('thing_properties',
+        where: 'identifier = ?', whereArgs: [identifier]);
+    await db.delete('dashboard_widgets',
+        where: 'property_identifier = ?', whereArgs: [identifier]);
   }
 
   Future<List<DashboardPageConfig>> loadPages() async {
@@ -183,6 +253,28 @@ class LinkBoxRepository {
     });
   }
 
+  Future<void> savePage(DashboardPageConfig page) async {
+    final db = await database;
+    await db.insert(
+      'dashboard_pages',
+      page.toDbMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> saveWidgets(List<DashboardWidgetConfig> widgets) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final widget in widgets) {
+        await txn.insert(
+          'dashboard_widgets',
+          widget.toDbMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
+
   Future<void> saveWidget(DashboardWidgetConfig widget) async {
     final db = await database;
     await db.insert(
@@ -195,6 +287,23 @@ class LinkBoxRepository {
   Future<void> deleteWidget(String id) async {
     final db = await database;
     await db.delete('dashboard_widgets', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<String> saveUploadedIcon({
+    required Uint8List bytes,
+    required String originalName,
+  }) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final iconDir = Directory(p.join(dir.path, 'user_icons'));
+    if (!await iconDir.exists()) {
+      await iconDir.create(recursive: true);
+    }
+    final safeName = originalName.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}_$safeName';
+    final file = File(p.join(
+        iconDir.path, fileName.endsWith('.png') ? fileName : '$fileName.png'));
+    await file.writeAsBytes(bytes, flush: true);
+    return file.path;
   }
 
   Future<void> cacheRuntimeValue(RuntimeValue value) async {
@@ -213,7 +322,8 @@ class LinkBoxRepository {
       ) latest ON rv.identifier = latest.identifier AND rv.time = latest.max_time
     ''');
     return {
-      for (final value in rows.map(RuntimeValue.fromMap)) value.identifier: value,
+      for (final value in rows.map(RuntimeValue.fromMap))
+        value.identifier: value,
     };
   }
 
@@ -227,7 +337,11 @@ class LinkBoxRepository {
     final rows = await db.query(
       'runtime_values',
       where: 'identifier = ? AND time >= ? AND time <= ?',
-      whereArgs: [identifier, start.millisecondsSinceEpoch, end.millisecondsSinceEpoch],
+      whereArgs: [
+        identifier,
+        start.millisecondsSinceEpoch,
+        end.millisecondsSinceEpoch
+      ],
       orderBy: 'time ASC',
       limit: limit,
     );
@@ -255,12 +369,12 @@ class LinkBoxRepository {
     final dir = await getApplicationDocumentsDirectory();
     final file = File(p.join(dir.path, 'don1ng-linkbox-backup.json'));
     final data = {
-      'schema': 1,
+      'schema': 2,
       'exported_at': DateTime.now().toIso8601String(),
       'project_config': config.toExportMap(includeSecret: includeSecret),
       'thing_properties': properties.map((item) => item.toExportMap()).toList(),
       'dashboard_pages': pages.map((item) => item.toDbMap()).toList(),
-      'dashboard_widgets': widgets.map((item) => item.toDbMap()).toList(),
+      'dashboard_widgets': widgets.map((item) => item.toExportMap()).toList(),
     };
     return file.writeAsString(const JsonEncoder.withIndent('  ').convert(data));
   }

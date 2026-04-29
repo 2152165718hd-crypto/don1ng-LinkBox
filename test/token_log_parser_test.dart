@@ -17,7 +17,8 @@ version:2018-10-31
 Token：version=2018-10-31&res=products%2F5X53hoeOP1%2Fdevices%2Fdon1ng&et=1830268800&method=md5&sign=abc
 ''';
 
-    final info = await TokenLogParser().parseBytes(Uint8List.fromList(utf8.encode(text)));
+    final info = await TokenLogParser()
+        .parseBytes(Uint8List.fromList(utf8.encode(text)));
 
     expect(info.productId, '5X53hoeOP1');
     expect(info.deviceName, 'don1ng');

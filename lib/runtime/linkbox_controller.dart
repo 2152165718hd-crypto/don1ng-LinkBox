@@ -8,7 +8,6 @@ import '../onenet/onenet_api_client.dart';
 import '../onenet/onenet_mqtt_service.dart';
 import '../storage/linkbox_repository.dart';
 import '../storage/models.dart';
-import '../thing_model/templates.dart';
 import '../thing_model/thing_model_importer.dart';
 import '../thing_model/validators.dart';
 
@@ -111,30 +110,14 @@ class LinkBoxController extends ChangeNotifier {
 
   Future<void> init() async {
     _setState(state.copyWith(busy: true, statusText: '正在加载本地配置'));
-    final config = await _repository.loadConfig();
-    final properties = await _repository.loadProperties();
-    final pages = await _repository.loadPages();
-    final widgets = await _repository.loadWidgets();
-    final values = await _repository.latestValues();
-    final logs = await _repository.loadLogs();
-    _setState(
-      state.copyWith(
-        config: config,
-        properties: properties,
-        pages: pages,
-        widgets: widgets,
-        values: values,
-        logs: logs,
-        busy: false,
-        statusText: '本地配置已加载',
-      ),
-    );
+    await _reloadCoreState(statusText: '本地配置已加载');
   }
 
   Future<void> saveConfig(ProjectConfig config) async {
     await _repository.saveConfig(config);
     await _log(LogLevel.info, 'config', 'OneNET 配置已保存');
-    _setState(state.copyWith(config: config, logs: await _repository.loadLogs()));
+    _setState(
+        state.copyWith(config: config, logs: await _repository.loadLogs()));
   }
 
   Future<ThingModelImportResult> importThingModel(Uint8List bytes) async {
@@ -149,31 +132,46 @@ class LinkBoxController extends ChangeNotifier {
         'thing-model',
         '成功导入 ${result.properties.length} 个属性，跳过 ${result.skipped.length} 个',
       );
-      await _reloadCoreState(statusText: '物模型导入完成');
+      await _reloadCoreState(statusText: '物模型导入完成，已生成可编辑 UI 卡片');
       return result;
     } catch (error) {
-      await _log(LogLevel.error, 'thing-model', '物模型导入失败', detail: error.toString());
+      await _log(LogLevel.error, 'thing-model', '物模型导入失败',
+          detail: error.toString());
       _setState(state.copyWith(busy: false, statusText: '物模型导入失败'));
       rethrow;
     }
   }
 
-  Future<void> addGraduateTemplates() async {
-    await _repository.upsertProperties(GraduateThingTemplates.all());
-    final properties = await _repository.loadProperties();
-    await _ensureDashboard(properties);
-    await _log(LogLevel.info, 'thing-model', '已添加毕设高频物模型模板');
-    await _reloadCoreState(statusText: '模板已添加');
+  Future<void> regenerateDashboard() async {
+    await _ensureDashboard(state.properties);
+    await _log(LogLevel.info, 'dashboard', '已补齐默认 UI 卡片和历史曲线');
+    await _reloadCoreState(statusText: '默认 UI 已补齐');
   }
 
-  Future<void> regenerateDashboard() async {
-    final dashboard = _dashboardFactory.buildDefault(state.properties);
-    await _repository.replaceDashboard(
-      pages: dashboard.pages,
-      widgets: dashboard.widgets,
+  Future<DashboardWidgetConfig?> dataWidgetForProperty(
+      ThingProperty property) async {
+    final existing = state.widgets.where(
+      (widget) =>
+          widget.propertyIdentifier == property.identifier &&
+          widget.displayMode != DashboardDisplayMode.trendChart,
     );
-    await _log(LogLevel.info, 'dashboard', '已重新生成默认面板');
-    await _reloadCoreState(statusText: '默认面板已生成');
+    if (existing.isNotEmpty) return existing.first;
+    await _ensureDashboard(state.properties);
+    await _reloadCoreState();
+    final created = state.widgets.where(
+      (widget) =>
+          widget.propertyIdentifier == property.identifier &&
+          widget.displayMode != DashboardDisplayMode.trendChart,
+    );
+    return created.isEmpty ? null : created.first;
+  }
+
+  Future<String> saveUploadedIcon({
+    required Uint8List bytes,
+    required String originalName,
+  }) {
+    return _repository.saveUploadedIcon(
+        bytes: bytes, originalName: originalName);
   }
 
   Future<void> refreshLatest() async {
@@ -201,8 +199,10 @@ class LinkBoxController extends ChangeNotifier {
         ),
       );
     } catch (error) {
-      await _log(LogLevel.error, 'onenet-api', '最新属性同步失败', detail: error.toString());
-      _setState(state.copyWith(busy: false, logs: await _repository.loadLogs(), statusText: '同步失败'));
+      await _log(LogLevel.error, 'onenet-api', '最新属性同步失败',
+          detail: error.toString());
+      _setState(state.copyWith(
+          busy: false, logs: await _repository.loadLogs(), statusText: '同步失败'));
     }
   }
 
@@ -220,7 +220,8 @@ class LinkBoxController extends ChangeNotifier {
       await _reloadLogs();
     } catch (error) {
       _startPollingFallback();
-      await _log(LogLevel.error, 'mqtt', '应用长连接失败，已启用 API 轮询', detail: error.toString());
+      await _log(LogLevel.error, 'mqtt', '应用长连接失败，已启用 API 轮询',
+          detail: error.toString());
       await _reloadLogs();
     }
   }
@@ -254,10 +255,12 @@ class LinkBoxController extends ChangeNotifier {
       await _log(LogLevel.info, 'control', '${property.displayName} 控制指令已下发');
       final values = Map<String, RuntimeValue>.of(state.values);
       values[property.identifier] = runtimeValue;
-      _setState(state.copyWith(values: values, logs: await _repository.loadLogs()));
+      _setState(
+          state.copyWith(values: values, logs: await _repository.loadLogs()));
       return null;
     } catch (error) {
-      await _log(LogLevel.error, 'control', '${property.displayName} 控制失败', detail: error.toString());
+      await _log(LogLevel.error, 'control', '${property.displayName} 控制失败',
+          detail: error.toString());
       await _reloadLogs();
       return error.toString();
     }
@@ -266,6 +269,10 @@ class LinkBoxController extends ChangeNotifier {
   Future<List<RuntimeValue>> loadHistory(ThingProperty property) async {
     final now = DateTime.now();
     final start = now.subtract(Duration(days: state.config.historyDays));
+    if (!state.config.isReady) {
+      return _repository.history(
+          identifier: property.identifier, start: start, end: now);
+    }
     try {
       final remote = await _apiClient.queryHistory(
         config: state.config,
@@ -277,19 +284,16 @@ class LinkBoxController extends ChangeNotifier {
       for (final value in remote) {
         await _repository.cacheRuntimeValue(value);
       }
-      await _log(LogLevel.info, 'history', '${property.displayName} 历史数据已同步');
-      await _reloadLogs();
       return remote;
-    } catch (error) {
-      await _log(LogLevel.warning, 'history', '远程历史查询失败，使用本地缓存', detail: error.toString());
-      await _reloadLogs();
-      return _repository.history(identifier: property.identifier, start: start, end: now);
+    } catch (_) {
+      return _repository.history(
+          identifier: property.identifier, start: start, end: now);
     }
   }
 
   Future<File> exportBackup({bool includeSecret = false}) async {
     final file = await _repository.exportBackup(includeSecret: includeSecret);
-    await _log(LogLevel.info, 'backup', '配置已导出: ${file.path}');
+    await _log(LogLevel.info, 'backup', '配置已导出 ${file.path}');
     await _reloadLogs();
     return file;
   }
@@ -304,20 +308,28 @@ class LinkBoxController extends ChangeNotifier {
     await _repository.deleteWidget(id);
     final widgets = await _repository.loadWidgets();
     await _log(LogLevel.info, 'dashboard', '控件已删除');
-    _setState(state.copyWith(widgets: widgets, logs: await _repository.loadLogs()));
+    _setState(
+        state.copyWith(widgets: widgets, logs: await _repository.loadLogs()));
   }
 
   Future<void> _ensureDashboard(List<ThingProperty> properties) async {
     final pages = await _repository.loadPages();
     final widgets = await _repository.loadWidgets();
-    if (pages.isNotEmpty && widgets.isNotEmpty) return;
-    final dashboard = _dashboardFactory.buildDefault(properties);
-    await _repository.replaceDashboard(pages: dashboard.pages, widgets: dashboard.widgets);
+    final dashboard = _dashboardFactory.mergeForProperties(
+      properties: properties,
+      pages: pages,
+      widgets: widgets,
+    );
+    for (final page in dashboard.pages) {
+      await _repository.savePage(page);
+    }
+    await _repository.saveWidgets(dashboard.widgets);
   }
 
   Future<void> _reloadCoreState({String statusText = ''}) async {
     _setState(
       state.copyWith(
+        config: await _repository.loadConfig(),
         properties: await _repository.loadProperties(),
         pages: await _repository.loadPages(),
         widgets: await _repository.loadWidgets(),
@@ -333,7 +345,8 @@ class LinkBoxController extends ChangeNotifier {
     _setState(state.copyWith(logs: await _repository.loadLogs()));
   }
 
-  Future<void> _log(LogLevel level, String type, String message, {String detail = ''}) async {
+  Future<void> _log(LogLevel level, String type, String message,
+      {String detail = ''}) async {
     await _repository.addLog(
       AppLogEntry(
         time: DateTime.now(),
@@ -350,7 +363,7 @@ class LinkBoxController extends ChangeNotifier {
       final data = message.payload['data'];
       final status = data is Map ? data['status']?.toString() : null;
       _setState(state.copyWith(deviceOnline: status != 'offline'));
-      await _log(LogLevel.info, 'lifecycle', '设备状态: ${status ?? 'unknown'}');
+      await _log(LogLevel.info, 'lifecycle', '设备状态 ${status ?? 'unknown'}');
       await _reloadLogs();
       return;
     }
@@ -362,7 +375,8 @@ class LinkBoxController extends ChangeNotifier {
       await _repository.cacheRuntimeValue(entry.value);
     }
     await _log(LogLevel.info, 'mqtt', '收到 ${runtimeValues.length} 个实时属性');
-    _setState(state.copyWith(values: values, logs: await _repository.loadLogs()));
+    _setState(
+        state.copyWith(values: values, logs: await _repository.loadLogs()));
   }
 
   void _startPollingFallback() {

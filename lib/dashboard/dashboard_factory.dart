@@ -7,83 +7,135 @@ class DashboardFactory {
 
   final Uuid _uuid;
 
-  ({List<DashboardPageConfig> pages, List<DashboardWidgetConfig> widgets}) buildDefault(
+  ({List<DashboardPageConfig> pages, List<DashboardWidgetConfig> widgets})
+      buildDefault(
     List<ThingProperty> properties,
   ) {
-    const pageId = 'main';
-    final widgets = <DashboardWidgetConfig>[];
-    var x = 16.0;
-    var y = 16.0;
-    var column = 0;
-
-    for (final property in properties) {
-      final type = _typeFor(property);
-      widgets.add(
-        DashboardWidgetConfig(
-          id: _uuid.v4(),
-          pageId: pageId,
-          type: type,
-          propertyIdentifier: property.identifier,
-          title: property.displayName,
-          x: x,
-          y: y,
-          width: 168,
-          height: type == DashboardWidgetType.trendChart ? 180 : 116,
-        ),
-      );
-      column += 1;
-      if (column == 2) {
-        column = 0;
-        x = 16;
-        y += 132;
-      } else {
-        x += 184;
-      }
-    }
-
-    final firstNumeric = properties.where((item) => item.isNumeric).take(2);
-    for (final property in firstNumeric) {
-      widgets.add(
-        DashboardWidgetConfig(
-          id: _uuid.v4(),
-          pageId: pageId,
-          type: DashboardWidgetType.trendChart,
-          propertyIdentifier: property.identifier,
-          title: '${property.displayName}趋势',
-          x: 16,
-          y: y,
-          width: 352,
-          height: 190,
-        ),
-      );
-      y += 206;
-    }
-
-    return (
-      pages: const [
-        DashboardPageConfig(id: pageId, name: '运行面板'),
-      ],
-      widgets: widgets,
+    return mergeForProperties(
+      properties: properties,
+      pages: const [],
+      widgets: const [],
     );
   }
 
-  DashboardWidgetType _typeFor(ThingProperty property) {
-    if (!property.writable) return DashboardWidgetType.valueCard;
-    switch (property.type) {
-      case ThingDataType.boolType:
-        return DashboardWidgetType.switchControl;
-      case ThingDataType.enumType:
-        return DashboardWidgetType.enumSelect;
-      case ThingDataType.int32:
-      case ThingDataType.int64:
-      case ThingDataType.float:
-      case ThingDataType.doubleType:
-        return DashboardWidgetType.slider;
-      case ThingDataType.stringType:
-      case ThingDataType.struct:
-      case ThingDataType.bitmap:
-      case ThingDataType.unknown:
-        return DashboardWidgetType.valueCard;
+  ({List<DashboardPageConfig> pages, List<DashboardWidgetConfig> widgets})
+      mergeForProperties({
+    required List<ThingProperty> properties,
+    required List<DashboardPageConfig> pages,
+    required List<DashboardWidgetConfig> widgets,
+  }) {
+    final nextPages = pages.isEmpty
+        ? const [DashboardPageConfig(id: 'main', name: '运行面板')]
+        : List<DashboardPageConfig>.of(pages);
+    final pageId = nextPages.first.id;
+    final nextWidgets = List<DashboardWidgetConfig>.of(widgets);
+    final dataBindings = nextWidgets
+        .where((item) => item.displayMode != DashboardDisplayMode.trendChart)
+        .map((item) => item.propertyIdentifier)
+        .toSet();
+    final chartBindings = nextWidgets
+        .where((item) => item.displayMode == DashboardDisplayMode.trendChart)
+        .map((item) => item.propertyIdentifier)
+        .toSet();
+
+    var nextPosition = _nextPosition(nextWidgets);
+    for (final property in properties) {
+      if (!dataBindings.contains(property.identifier)) {
+        final mode = defaultDisplayModeFor(property);
+        nextWidgets.add(
+          DashboardWidgetConfig(
+            id: _uuid.v4(),
+            pageId: pageId,
+            type: widgetTypeForDisplayMode(mode),
+            propertyIdentifier: property.identifier,
+            title: property.displayName,
+            x: nextPosition.x,
+            y: nextPosition.y,
+            width: 172,
+            height: 124,
+            displayMode: mode,
+            iconKind: DashboardIconKind.builtinPng,
+            iconValue: defaultBuiltinIconKey(property),
+            showUnit: true,
+            decimalDigits: property.isNumeric ? 1 : 0,
+          ),
+        );
+        nextPosition = nextPosition.nextCard();
+      }
+      if (property.isNumeric && !chartBindings.contains(property.identifier)) {
+        nextWidgets.add(
+          DashboardWidgetConfig(
+            id: _uuid.v4(),
+            pageId: pageId,
+            type: DashboardWidgetType.trendChart,
+            propertyIdentifier: property.identifier,
+            title: '${property.displayName}趋势',
+            x: 16,
+            y: nextPosition.y,
+            width: 360,
+            height: 210,
+            displayMode: DashboardDisplayMode.trendChart,
+            iconKind: DashboardIconKind.builtinPng,
+            iconValue: defaultBuiltinIconKey(property),
+            showUnit: true,
+            decimalDigits: property.isNumeric ? 1 : 0,
+          ),
+        );
+        nextPosition = nextPosition.nextChart();
+      }
     }
+
+    return (pages: nextPages, widgets: nextWidgets);
+  }
+}
+
+String defaultBuiltinIconKey(ThingProperty property) {
+  final id = '${property.identifier} ${property.name}'.toLowerCase();
+  if (id.contains('temp') || id.contains('温度')) return 'temperature';
+  if (id.contains('hum') || id.contains('湿度')) return 'humidity';
+  if (id.contains('light') || id.contains('illum') || id.contains('光')) {
+    return 'light';
+  }
+  if (id.contains('smoke') || id.contains('gas') || id.contains('烟')) {
+    return 'smoke';
+  }
+  if (id.contains('distance') || id.contains('range') || id.contains('距')) {
+    return 'distance';
+  }
+  if (id.contains('relay') || id.contains('继电器')) return 'relay';
+  if (id.contains('switch') || id.contains('led') || id.contains('灯')) {
+    return 'switch';
+  }
+  if (id.contains('motor') || id.contains('电机')) return 'motor';
+  return 'device';
+}
+
+_DashboardPosition _nextPosition(List<DashboardWidgetConfig> widgets) {
+  if (widgets.isEmpty) return const _DashboardPosition(16, 16, 0);
+  final bottom = widgets.fold<double>(
+    16,
+    (current, item) => item.y + item.height + 16 > current
+        ? item.y + item.height + 16
+        : current,
+  );
+  return _DashboardPosition(16, bottom, 0);
+}
+
+class _DashboardPosition {
+  const _DashboardPosition(this.x, this.y, this.column);
+
+  final double x;
+  final double y;
+  final int column;
+
+  _DashboardPosition nextCard() {
+    if (column == 0) {
+      return _DashboardPosition(204, y, 1);
+    }
+    return _DashboardPosition(16, y + 144, 0);
+  }
+
+  _DashboardPosition nextChart() {
+    return _DashboardPosition(16, y + 230, 0);
   }
 }

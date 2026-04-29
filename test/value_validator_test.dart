@@ -29,7 +29,8 @@ void main() {
       rawType: 'float',
     );
 
-    final result = const ThingValueValidator().validateForControl(property, 20.5);
+    final result =
+        const ThingValueValidator().validateForControl(property, 20.5);
 
     expect(result.isValid, isFalse);
     expect(result.message, contains('只读'));
