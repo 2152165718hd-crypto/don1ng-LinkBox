@@ -12,7 +12,6 @@ import 'dashboard/dashboard_constants.dart';
 import 'dashboard/dashboard_widgets.dart';
 import 'dashboard/icon_library.dart';
 import 'onenet/onenet_mqtt_service.dart';
-import 'onenet/token_log_parser.dart';
 import 'runtime/linkbox_controller.dart';
 import 'storage/models.dart';
 import 'thing_model/thing_model_importer.dart';
@@ -231,7 +230,7 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
   final _deviceName = TextEditingController();
   final _refreshSeconds = TextEditingController();
   final _historyDays = TextEditingController();
-  AuthMode _authMode = AuthMode.projectGroup;
+  AuthMode _authMode = AuthMode.deviceToken;
   String _fingerprint = '';
   bool _hasUserEdited = false;
   bool _syncingControllers = false;
@@ -297,42 +296,44 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final state = widget.controller.state;
+    final config = state.config;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('OneNET Studio 应用接入',
-            style: Theme.of(context).textTheme.titleLarge),
+        Text('设备 Token 快速接入', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                DropdownButtonFormField<AuthMode>(
-                  initialValue: _authMode,
-                  items: const [
-                    DropdownMenuItem(
-                        value: AuthMode.projectGroup, child: Text('项目分组鉴权')),
-                    DropdownMenuItem(value: AuthMode.user, child: Text('用户鉴权')),
-                  ],
-                  onChanged: (value) => setState(() {
-                    _hasUserEdited = true;
-                    _authMode = value ?? AuthMode.projectGroup;
-                  }),
-                  decoration: const InputDecoration(labelText: '鉴权模式'),
+                _ConfigStatusCard(
+                  config: config,
+                  propertyCount: state.properties.length,
                 ),
-                const SizedBox(height: 10),
-                _TextField(controller: _projectId, label: 'Project ID'),
-                if (_authMode == AuthMode.projectGroup)
-                  _TextField(controller: _groupId, label: 'Group ID'),
-                if (_authMode == AuthMode.user)
-                  _TextField(controller: _userId, label: 'User ID'),
-                _TextField(
-                    controller: _accessKey,
-                    label: 'Access Key',
-                    obscureText: true),
-                _TextField(controller: _productId, label: 'Product ID'),
-                _TextField(controller: _deviceName, label: 'Device Name'),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _importConnectionFiles,
+                    icon: const Icon(Icons.folder_open),
+                    label: const Text('一键导入 Token.log + 物模型 JSON'),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                        child: _TextField(
+                            controller: _productId, label: 'Product ID')),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: _TextField(
+                            controller: _deviceName, label: 'Device Name')),
+                  ],
+                ),
                 Row(
                   children: [
                     Expanded(
@@ -352,7 +353,55 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 4),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('高级应用接入'),
+                  subtitle:
+                      const Text('需要 Project ID、Group ID/User ID 和 AccessKey'),
+                  childrenPadding: EdgeInsets.zero,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => setState(() {
+                          _hasUserEdited = true;
+                          _authMode = AuthMode.deviceToken;
+                        }),
+                        icon: const Icon(Icons.flash_on),
+                        label: const Text('使用简单设备 Token 模式'),
+                      ),
+                    ),
+                    DropdownButtonFormField<AuthMode>(
+                      initialValue: _authMode == AuthMode.user
+                          ? AuthMode.user
+                          : AuthMode.projectGroup,
+                      items: const [
+                        DropdownMenuItem(
+                            value: AuthMode.projectGroup,
+                            child: Text('项目分组鉴权')),
+                        DropdownMenuItem(
+                            value: AuthMode.user, child: Text('用户鉴权')),
+                      ],
+                      onChanged: (value) => setState(() {
+                        _hasUserEdited = true;
+                        _authMode = value ?? AuthMode.projectGroup;
+                      }),
+                      decoration: const InputDecoration(labelText: '鉴权模式'),
+                    ),
+                    const SizedBox(height: 10),
+                    _TextField(controller: _projectId, label: 'Project ID'),
+                    if (_authMode == AuthMode.projectGroup)
+                      _TextField(controller: _groupId, label: 'Group ID'),
+                    if (_authMode == AuthMode.user)
+                      _TextField(controller: _userId, label: 'User ID'),
+                    _TextField(
+                        controller: _accessKey,
+                        label: 'Access Key',
+                        obscureText: true),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
@@ -361,11 +410,6 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
                       onPressed: _save,
                       icon: const Icon(Icons.save),
                       label: const Text('保存配置'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _importTokenLog,
-                      icon: const Icon(Icons.description),
-                      label: const Text('导入 Token.log'),
                     ),
                     OutlinedButton.icon(
                       onPressed: widget.controller.connectRealtime,
@@ -413,6 +457,11 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
       config.accessKey,
       config.productId,
       config.deviceName,
+      config.deviceKey,
+      config.deviceToken,
+      config.deviceTokenMethod,
+      config.deviceTokenVersion,
+      config.deviceTokenExpiresAt?.millisecondsSinceEpoch,
       config.authMode.name,
       config.refreshSeconds,
       config.historyDays,
@@ -446,6 +495,7 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
   }
 
   Future<void> _save() async {
+    final current = widget.controller.state.config;
     final config = ProjectConfig(
       projectId: _projectId.text.trim(),
       groupId: _groupId.text.trim(),
@@ -453,6 +503,11 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
       accessKey: _accessKey.text.trim(),
       productId: _productId.text.trim(),
       deviceName: _deviceName.text.trim(),
+      deviceKey: current.deviceKey,
+      deviceToken: current.deviceToken,
+      deviceTokenMethod: current.deviceTokenMethod,
+      deviceTokenVersion: current.deviceTokenVersion,
+      deviceTokenExpiresAt: current.deviceTokenExpiresAt,
       authMode: _authMode,
       refreshSeconds: int.tryParse(_refreshSeconds.text.trim()) ?? 15,
       historyDays: int.tryParse(_historyDays.text.trim()) ?? 7,
@@ -465,39 +520,46 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
     }
   }
 
-  Future<void> _importTokenLog() async {
+  Future<void> _importConnectionFiles() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['log', 'txt'],
+      allowedExtensions: const ['log', 'txt', 'json'],
       withData: true,
+      allowMultiple: true,
     );
     if (result == null || result.files.isEmpty) return;
-    final file = result.files.single;
-    final bytes = await _readPickedFileBytes(file);
-    if (bytes == null) {
-      if (!mounted) return;
-      _showSnackBar(context, '无法读取 Token.log 文件内容');
-      return;
+    final payloads = <ConnectionImportFile>[];
+    for (final file in result.files) {
+      final bytes = await _readPickedFileBytes(file);
+      if (bytes == null) {
+        if (!mounted) return;
+        _showSnackBar(context, '无法读取 ${file.name}');
+        return;
+      }
+      payloads.add(ConnectionImportFile(name: file.name, bytes: bytes));
     }
     try {
-      final info = await TokenLogParser().parseBytes(bytes);
+      final importResult =
+          await widget.controller.importConnectionFiles(payloads);
+      if (!mounted) return;
       setState(() {
-        _hasUserEdited = true;
-        _productId.text = info.productId;
-        _deviceName.text = info.deviceName;
+        _syncControllers(importResult.config, markPristine: true);
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                '已从 Token.log 识别 Product ID 和 Device Name；DeviceKey 不会作为 APP AccessKey 使用'),
-          ),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              '已导入 ${importResult.thingModel.properties.length} 个属性，可直接连接'),
+        ),
+      );
+      if (importResult.thingModel.hasIssues) {
+        showDialog<void>(
+          context: context,
+          builder: (_) => _ImportReportDialog(result: importResult.thingModel),
         );
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Token.log 识别失败: $error')));
+        _showSnackBar(context, '连接文件导入失败: $error');
       }
     }
   }
@@ -531,6 +593,65 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
         _showSnackBar(context, '备份导入失败: $error');
       }
     }
+  }
+}
+
+class _ConfigStatusCard extends StatelessWidget {
+  const _ConfigStatusCard({
+    required this.config,
+    required this.propertyCount,
+  });
+
+  final ProjectConfig config;
+  final int propertyCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final ready = config.isReady && propertyCount > 0;
+    final mode = config.usesDeviceToken ? '简单设备 Token' : '高级应用接入';
+    final tokenExpiresAt = config.deviceTokenExpiresAt;
+    final tokenText = config.deviceKey.trim().isNotEmpty
+        ? '可自动续期'
+        : tokenExpiresAt == null
+            ? '未记录有效期'
+            : _formatDateTime(tokenExpiresAt);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                ready ? Icons.check_circle : Icons.info_outline,
+                color: ready ? Colors.green : scheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  ready ? '连接文件已就绪' : '请导入 Token.log 和物模型 JSON',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text('模式：$mode'),
+          Text(
+              'Product ID：${config.productId.isEmpty ? '-' : config.productId}'),
+          Text(
+              'Device Name：${config.deviceName.isEmpty ? '-' : config.deviceName}'),
+          Text('Token：$tokenText'),
+          Text('物模型属性：$propertyCount'),
+        ],
+      ),
+    );
   }
 }
 
@@ -1438,12 +1559,12 @@ class _TutorialCard extends StatelessWidget {
             Text('最短接入路径', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             const Text('1. 在 OneNET Studio 创建产品和设备，接入协议选择 MQTT。'),
-            const Text('2. 设置物模型并导出 JSON，在物模型页导入。'),
-            const Text('3. 在应用开发中创建项目分组，复制 Project ID、Group ID 和 AccessKey。'),
-            const Text('4. 保存配置后点击连接，先同步最新数据，再进入运行页调试。'),
+            const Text('2. 导出 Token.log 和物模型 JSON，在设备页一次选择两份文件导入。'),
+            const Text('3. 确认 Product ID、Device Name 和物模型属性数量后点击连接。'),
+            const Text('4. 需要云端历史查询时，再展开高级应用接入填写应用鉴权。'),
             const SizedBox(height: 8),
             Text(
-              'MVP 使用应用长连接和 OpenAPI，不占用单片机设备的 MQTT 登录身份。',
+              '简单模式使用设备 Token MQTT，可能占用同一设备在线身份。',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],

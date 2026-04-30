@@ -18,11 +18,13 @@ class ThingModelImportResult {
     required this.properties,
     required this.skipped,
     required this.warnings,
+    this.productId = '',
   });
 
   final List<ThingProperty> properties;
   final List<ThingModelSkippedItem> skipped;
   final List<String> warnings;
+  final String productId;
 
   bool get hasIssues => skipped.isNotEmpty || warnings.isNotEmpty;
 }
@@ -39,6 +41,7 @@ class ThingModelImporter {
     if (propertiesNode is! List) {
       throw const FormatException('未找到 OneNET 物模型 properties 数组');
     }
+    final productId = _readProductId(decoded);
     final imported = <ThingProperty>[];
     final skipped = <ThingModelSkippedItem>[];
 
@@ -69,7 +72,16 @@ class ThingModelImporter {
       properties: imported,
       skipped: skipped,
       warnings: warnings,
+      productId: productId,
     );
+  }
+
+  String _readProductId(Map root) {
+    final profile = root['profile'];
+    if (profile is Map) {
+      return profile['productId']?.toString().trim() ?? '';
+    }
+    return '';
   }
 
   Future<String> _decodeText(Uint8List bytes, List<String> warnings) async {

@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-enum AuthMode { projectGroup, user }
+enum AuthMode { deviceToken, projectGroup, user }
 
 enum AccessMode { readOnly, writeOnly, readWrite }
 
@@ -55,8 +55,13 @@ class ProjectConfig {
     required this.accessKey,
     required this.productId,
     required this.deviceName,
+    this.deviceKey = '',
+    this.deviceToken = '',
+    this.deviceTokenMethod = 'md5',
+    this.deviceTokenVersion = '2018-10-31',
+    this.deviceTokenExpiresAt,
     this.userId = '',
-    this.authMode = AuthMode.projectGroup,
+    this.authMode = AuthMode.deviceToken,
     this.refreshSeconds = 15,
     this.historyDays = 7,
   });
@@ -67,26 +72,52 @@ class ProjectConfig {
   final String accessKey;
   final String productId;
   final String deviceName;
+  final String deviceKey;
+  final String deviceToken;
+  final String deviceTokenMethod;
+  final String deviceTokenVersion;
+  final DateTime? deviceTokenExpiresAt;
   final AuthMode authMode;
   final int refreshSeconds;
   final int historyDays;
 
   String get resource {
+    if (authMode == AuthMode.deviceToken) {
+      return deviceResource;
+    }
     if (authMode == AuthMode.user) {
       return 'userid/$userId';
     }
     return 'projectid/$projectId/groupid/$groupId';
   }
 
+  String get deviceResource => 'products/$productId/devices/$deviceName';
+
+  bool get usesDeviceToken => authMode == AuthMode.deviceToken;
+
+  bool get supportsOpenApi => authMode != AuthMode.deviceToken;
+
+  bool get _hasUsableImportedDeviceToken {
+    if (deviceToken.trim().isEmpty) return false;
+    final expiresAt = deviceTokenExpiresAt;
+    if (expiresAt == null) return true;
+    return expiresAt.isAfter(DateTime.now());
+  }
+
   bool get isReady {
+    final hasDeviceIdentity =
+        productId.trim().isNotEmpty && deviceName.trim().isNotEmpty;
+    if (authMode == AuthMode.deviceToken) {
+      return hasDeviceIdentity &&
+          (deviceKey.trim().isNotEmpty || _hasUsableImportedDeviceToken);
+    }
     final hasAuthScope = authMode == AuthMode.user
         ? userId.trim().isNotEmpty
         : groupId.trim().isNotEmpty;
-    return projectId.trim().isNotEmpty &&
+    return hasDeviceIdentity &&
+        projectId.trim().isNotEmpty &&
         hasAuthScope &&
-        accessKey.trim().isNotEmpty &&
-        productId.trim().isNotEmpty &&
-        deviceName.trim().isNotEmpty;
+        accessKey.trim().isNotEmpty;
   }
 
   ProjectConfig copyWith({
@@ -96,6 +127,12 @@ class ProjectConfig {
     String? accessKey,
     String? productId,
     String? deviceName,
+    String? deviceKey,
+    String? deviceToken,
+    String? deviceTokenMethod,
+    String? deviceTokenVersion,
+    DateTime? deviceTokenExpiresAt,
+    bool clearDeviceTokenExpiresAt = false,
     AuthMode? authMode,
     int? refreshSeconds,
     int? historyDays,
@@ -107,6 +144,13 @@ class ProjectConfig {
       accessKey: accessKey ?? this.accessKey,
       productId: productId ?? this.productId,
       deviceName: deviceName ?? this.deviceName,
+      deviceKey: deviceKey ?? this.deviceKey,
+      deviceToken: deviceToken ?? this.deviceToken,
+      deviceTokenMethod: deviceTokenMethod ?? this.deviceTokenMethod,
+      deviceTokenVersion: deviceTokenVersion ?? this.deviceTokenVersion,
+      deviceTokenExpiresAt: clearDeviceTokenExpiresAt
+          ? null
+          : deviceTokenExpiresAt ?? this.deviceTokenExpiresAt,
       authMode: authMode ?? this.authMode,
       refreshSeconds: refreshSeconds ?? this.refreshSeconds,
       historyDays: historyDays ?? this.historyDays,
@@ -121,6 +165,9 @@ class ProjectConfig {
       'user_id': userId,
       'product_id': productId,
       'device_name': deviceName,
+      'device_token_method': deviceTokenMethod,
+      'device_token_version': deviceTokenVersion,
+      'device_token_expires_at': deviceTokenExpiresAt?.millisecondsSinceEpoch,
       'auth_mode': authMode.name,
       'refresh_seconds': refreshSeconds,
       'history_days': historyDays,
@@ -136,15 +183,23 @@ class ProjectConfig {
       'user_id': userId,
       'product_id': productId,
       'device_name': deviceName,
+      'device_token_method': deviceTokenMethod,
+      'device_token_version': deviceTokenVersion,
+      'device_token_expires_at': deviceTokenExpiresAt?.millisecondsSinceEpoch,
       'auth_mode': authMode.name,
       'refresh_seconds': refreshSeconds,
       'history_days': historyDays,
-      if (includeSecret) 'access_key': accessKey,
+      if (includeSecret) ...{
+        'access_key': accessKey,
+        'device_key': deviceKey,
+        'device_token': deviceToken,
+      },
     };
   }
 
   factory ProjectConfig.fromMap(Map<String, Object?> map,
-      {String accessKey = ''}) {
+      {String accessKey = '', String deviceKey = '', String deviceToken = ''}) {
+    final expiresMillis = map['device_token_expires_at'];
     return ProjectConfig(
       projectId: map['project_id'] as String? ?? '',
       groupId: map['group_id'] as String? ?? '',
@@ -152,9 +207,17 @@ class ProjectConfig {
       accessKey: accessKey,
       productId: map['product_id'] as String? ?? '',
       deviceName: map['device_name'] as String? ?? '',
+      deviceKey: deviceKey,
+      deviceToken: deviceToken,
+      deviceTokenMethod: map['device_token_method'] as String? ?? 'md5',
+      deviceTokenVersion:
+          map['device_token_version'] as String? ?? '2018-10-31',
+      deviceTokenExpiresAt: expiresMillis is num
+          ? DateTime.fromMillisecondsSinceEpoch(expiresMillis.toInt())
+          : null,
       authMode: AuthMode.values.firstWhere(
         (mode) => mode.name == (map['auth_mode'] as String? ?? ''),
-        orElse: () => AuthMode.projectGroup,
+        orElse: () => AuthMode.deviceToken,
       ),
       refreshSeconds: (map['refresh_seconds'] as int?) ?? 15,
       historyDays: (map['history_days'] as int?) ?? 7,
@@ -168,6 +231,7 @@ class ProjectConfig {
       accessKey: '',
       productId: '',
       deviceName: '',
+      authMode: AuthMode.deviceToken,
     );
   }
 }

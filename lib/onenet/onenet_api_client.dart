@@ -116,6 +116,9 @@ class OnenetApiClient {
     Map<String, String>? query,
     Map<String, Object?>? body,
   }) async {
+    if (!config.supportsOpenApi) {
+      throw const OnenetApiException('简单模式不支持 OneNET OpenAPI，请启用高级应用接入');
+    }
     try {
       final response = await _dio.request<Object?>(
         '/application',

@@ -2,6 +2,52 @@
 
 本项目按 `VERSIONING.md` 维护版本。每个版本必须说明版本定位、相较上一版的变化、迁移或兼容性影响、验证结果和发布产物状态。
 
+## v0.5.0 - 2026-04-30
+
+版本定位：设备 Token 快速接入与简单 MQTT 控制版本。
+
+相较 `v0.4.0`：这一版把默认接入流程从高级应用鉴权调整为设备 Token 快速接入，用户一次选择 `Token.log` 和 OneNET TSL JSON 后即可生成连接配置、导入物模型并通过 MQTT 收发属性；高级项目分组/用户鉴权仍保留在配置页用于 OpenAPI、历史数据和不占用设备身份的场景。
+
+新增：
+
+- 设备页新增“一键导入 Token.log + 物模型 JSON”流程，同时解析连接身份和物模型属性。
+- 新增设备 Token 鉴权生成，支持使用 `DeviceKey` 自动续期 Token，也支持复用未过期的导入 Token。
+- MQTT 服务新增设备 Token 身份连接参数、属性设置订阅、属性设置消息解析和属性发布。
+- 简单模式下控制下发改走 MQTT property post，高级应用接入继续使用 OneNET OpenAPI。
+- 配置状态卡展示接入模式、Product ID、Device Name、Token 有效期和物模型属性数量。
+- 新增连接文件导入、产品 ID 校验、设备 Token 鉴权、MQTT 凭据生成和 Token.log 解析测试。
+
+变更：
+
+- 默认鉴权模式改为设备 Token；高级项目分组/用户鉴权折叠到“高级应用接入”中。
+- Token.log 解析支持英文冒号、中文冒号、Token-only 日志和常见乱码冒号输出。
+- 物模型导入会读取 `profile.productId`，并与 Token.log 的 Product ID 做一致性校验。
+- 简单模式不再调用 OneNET OpenAPI；刷新和历史数据优先使用本地 MQTT 缓存。
+- README 更新为设备 Token 快速接入说明，并保留高级应用接入边界说明。
+
+兼容性与迁移：
+
+- 本地数据库 schema 从 `2` 升级到 `3`，为 `project_config` 增加 `device_token_method`、`device_token_version` 和 `device_token_expires_at`。
+- `DeviceKey` 和导入 Token 使用安全存储保存，不写入普通数据库字段。
+- 备份导出 schema 标记升级到 `3`；包含密钥导出时会带出设备 Token 相关密钥字段。
+- 简单设备 Token 模式可能占用同一设备 MQTT 在线身份；需要避免占用真实设备会话或需要云端历史查询时，应启用高级应用接入。
+
+验证：
+
+- `flutter pub get` 通过。
+- `dart format lib test` 通过。
+- `flutter analyze` 通过。
+- `flutter test` 通过。
+- `flutter build apk --release` 通过。
+- `apksigner verify --print-certs` 通过。
+
+发布产物：
+
+- GitHub Release：[v0.5.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.5.0)
+- 与上一版对比：[v0.4.0...v0.5.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/compare/v0.4.0...v0.5.0)
+- 本地 APK 归档：`build/app/outputs/versioned-apk/don1ng-LinkBox-v0.5.0-signed.apk`
+- GitHub Release 附件：`don1ng-LinkBox-v0.5.0-signed.apk`
+
 ## v0.4.0 - 2026-04-30
 
 版本定位：物模型重置与本地数据清理版本。

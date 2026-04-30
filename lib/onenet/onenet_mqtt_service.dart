@@ -13,8 +13,23 @@ enum OnenetRealtimeMessageType {
   lifecycle,
   property,
   event,
+  propertySet,
   propertySetReply,
   unknown
+}
+
+class OnenetMqttCredentials {
+  const OnenetMqttCredentials({
+    required this.clientId,
+    required this.username,
+    required this.password,
+    required this.usesDeviceToken,
+  });
+
+  final String clientId;
+  final String username;
+  final String password;
+  final bool usesDeviceToken;
 }
 
 class OnenetRealtimeMessage {
@@ -31,10 +46,12 @@ class OnenetRealtimeMessage {
   final Map<String, Object?> payload;
 
   Map<String, RuntimeValue> toRuntimeValues() {
-    if (type != OnenetRealtimeMessageType.property) return const {};
+    if (type != OnenetRealtimeMessageType.property &&
+        type != OnenetRealtimeMessageType.propertySet) {
+      return const {};
+    }
     final data = payload['data'];
-    if (data is! Map) return const {};
-    final params = data['params'];
+    final params = data is Map ? data['params'] : payload['params'];
     if (params is! Map) return const {};
     final values = <String, RuntimeValue>{};
     for (final entry in params.entries) {
@@ -80,13 +97,31 @@ class OnenetMqttService {
   Stream<OnenetRealtimeMessage> get messages => _messages.stream;
   Stream<OnenetMqttConnectionState> get states => _states.stream;
 
+  OnenetMqttCredentials credentialsFor(ProjectConfig config, {DateTime? now}) {
+    if (config.authMode == AuthMode.deviceToken) {
+      return OnenetMqttCredentials(
+        clientId: config.deviceName.trim(),
+        username: config.productId.trim(),
+        password: _auth.generateDeviceToken(config, now: now),
+        usesDeviceToken: true,
+      );
+    }
+    final effectiveNow = now ?? DateTime.now();
+    return OnenetMqttCredentials(
+      clientId: 'don1ng_linkbox_${effectiveNow.millisecondsSinceEpoch}',
+      username: config.resource,
+      password: _auth.generateApplicationAuthorization(config, now: now),
+      usesDeviceToken: false,
+    );
+  }
+
   Future<void> connect(ProjectConfig config) async {
     await disconnect();
     _states.add(OnenetMqttConnectionState.connecting);
-    final clientId = 'don1ng_linkbox_${DateTime.now().millisecondsSinceEpoch}';
+    final credentials = credentialsFor(config);
     final client = MqttServerClient.withPort(
       _mqttHost,
-      clientId,
+      credentials.clientId,
       _mqttTlsPort,
     );
     client.secure = true;
@@ -106,8 +141,8 @@ class OnenetMqttService {
     client.onAutoReconnected =
         () => _states.add(OnenetMqttConnectionState.connected);
     client.connectionMessage = MqttConnectMessage()
-        .withClientIdentifier(clientId)
-        .authenticateAs(config.resource, _auth.generateAuthorization(config))
+        .withClientIdentifier(credentials.clientId)
+        .authenticateAs(credentials.username, credentials.password)
         .startClean()
         .withWillQos(MqttQos.atMostOnce);
 
@@ -132,12 +167,44 @@ class OnenetMqttService {
     _states.add(OnenetMqttConnectionState.disconnected);
   }
 
+  Future<void> publishProperty({
+    required ProjectConfig config,
+    required String identifier,
+    required Object? value,
+  }) async {
+    final client = _client;
+    if (client == null ||
+        client.connectionStatus?.state != MqttConnectionState.connected) {
+      throw StateError('MQTT 未连接，无法发布属性');
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final payload = {
+      'id': now.toString(),
+      'version': '1.0',
+      'params': {
+        identifier: {
+          'value': value,
+          'time': now,
+        },
+      },
+    };
+    final builder = MqttClientPayloadBuilder();
+    builder.addUTF8String(jsonEncode(payload));
+    client.publishMessage(
+      '\$sys/${config.productId}/${config.deviceName}/thing/property/post',
+      MqttQos.atMostOnce,
+      builder.payload!,
+    );
+  }
+
   void _subscribe(ProjectConfig config) {
     final base = '\$sys/${config.productId}/${config.deviceName}/thing';
     _client?.subscribe('$base/lifecycle', MqttQos.atMostOnce);
     _client?.subscribe('$base/property', MqttQos.atMostOnce);
-    _client?.subscribe('$base/event', MqttQos.atMostOnce);
+    _client?.subscribe('$base/property/post/reply', MqttQos.atMostOnce);
+    _client?.subscribe('$base/property/set', MqttQos.atMostOnce);
     _client?.subscribe('$base/property/set/reply', MqttQos.atMostOnce);
+    _client?.subscribe('$base/event', MqttQos.atMostOnce);
   }
 
   void _handleUpdates(List<MqttReceivedMessage<MqttMessage>> updates) {
@@ -174,8 +241,12 @@ class OnenetMqttService {
     if (topic.endsWith('/thing/lifecycle')) {
       return OnenetRealtimeMessageType.lifecycle;
     }
-    if (topic.endsWith('/thing/property')) {
+    if (topic.endsWith('/thing/property') ||
+        topic.endsWith('/thing/property/post')) {
       return OnenetRealtimeMessageType.property;
+    }
+    if (topic.endsWith('/thing/property/set')) {
+      return OnenetRealtimeMessageType.propertySet;
     }
     if (topic.endsWith('/thing/event')) return OnenetRealtimeMessageType.event;
     if (topic.endsWith('/thing/property/set/reply')) {

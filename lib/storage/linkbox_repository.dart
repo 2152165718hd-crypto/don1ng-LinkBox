@@ -15,6 +15,8 @@ class LinkBoxRepository {
   }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   static const _accessKeyStorageKey = 'onenet_access_key';
+  static const _deviceKeyStorageKey = 'onenet_device_key';
+  static const _deviceTokenStorageKey = 'onenet_device_token';
   static const _maxLogEntries = 1000;
   final FlutterSecureStorage _secureStorage;
   Database? _db;
@@ -25,7 +27,7 @@ class LinkBoxRepository {
     final dbPath = p.join(dir.path, 'don1ng_linkbox.db');
     _db = await openDatabase(
       dbPath,
-      version: 2,
+      version: 3,
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
     );
@@ -41,6 +43,9 @@ class LinkBoxRepository {
         user_id TEXT NOT NULL,
         product_id TEXT NOT NULL,
         device_name TEXT NOT NULL,
+        device_token_method TEXT NOT NULL,
+        device_token_version TEXT NOT NULL,
+        device_token_expires_at INTEGER,
         auth_mode TEXT NOT NULL,
         refresh_seconds INTEGER NOT NULL,
         history_days INTEGER NOT NULL,
@@ -130,6 +135,14 @@ class LinkBoxRepository {
         END
       ''');
     }
+    if (oldVersion < 3) {
+      await _addColumnIfMissing(db, 'project_config', 'device_token_method',
+          "TEXT NOT NULL DEFAULT 'md5'");
+      await _addColumnIfMissing(db, 'project_config', 'device_token_version',
+          "TEXT NOT NULL DEFAULT '2018-10-31'");
+      await _addColumnIfMissing(
+          db, 'project_config', 'device_token_expires_at', 'INTEGER');
+    }
   }
 
   static const _dashboardWidgetsSchema = '''
@@ -171,16 +184,33 @@ class LinkBoxRepository {
     final rows = await db.query('project_config', limit: 1);
     final accessKey =
         await _secureStorage.read(key: _accessKeyStorageKey) ?? '';
+    final deviceKey =
+        await _secureStorage.read(key: _deviceKeyStorageKey) ?? '';
+    final deviceToken =
+        await _secureStorage.read(key: _deviceTokenStorageKey) ?? '';
     if (rows.isEmpty) {
-      return ProjectConfig.empty().copyWith(accessKey: accessKey);
+      return ProjectConfig.empty().copyWith(
+        accessKey: accessKey,
+        deviceKey: deviceKey,
+        deviceToken: deviceToken,
+      );
     }
-    return ProjectConfig.fromMap(rows.first, accessKey: accessKey);
+    return ProjectConfig.fromMap(
+      rows.first,
+      accessKey: accessKey,
+      deviceKey: deviceKey,
+      deviceToken: deviceToken,
+    );
   }
 
   Future<void> saveConfig(ProjectConfig config) async {
     final db = await database;
     await _secureStorage.write(
         key: _accessKeyStorageKey, value: config.accessKey);
+    await _secureStorage.write(
+        key: _deviceKeyStorageKey, value: config.deviceKey);
+    await _secureStorage.write(
+        key: _deviceTokenStorageKey, value: config.deviceToken);
     await db.insert(
       'project_config',
       config.toDbMap(includeSecret: false),
@@ -408,7 +438,7 @@ class LinkBoxRepository {
       'don1ng-linkbox-backup-${_fileTimestamp(DateTime.now())}.json',
     ));
     final data = {
-      'schema': 2,
+      'schema': 3,
       'exported_at': DateTime.now().toIso8601String(),
       'project_config': config.toExportMap(includeSecret: includeSecret),
       'thing_properties': properties.map((item) => item.toExportMap()).toList(),
@@ -428,9 +458,15 @@ class LinkBoxRepository {
     final existingConfig = await loadConfig();
     final importedAccessKey =
         configMap['access_key']?.toString() ?? existingConfig.accessKey;
+    final importedDeviceKey =
+        configMap['device_key']?.toString() ?? existingConfig.deviceKey;
+    final importedDeviceToken =
+        configMap['device_token']?.toString() ?? existingConfig.deviceToken;
     final config = ProjectConfig.fromMap(
       configMap,
       accessKey: importedAccessKey,
+      deviceKey: importedDeviceKey,
+      deviceToken: importedDeviceToken,
     );
     final properties = _mapList(root['thing_properties'], 'thing_properties')
         .map((item) => ThingProperty.fromMap(_normalizePropertyMap(item)))

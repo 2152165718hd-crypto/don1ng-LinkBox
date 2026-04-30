@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -6,10 +7,31 @@ import 'package:flutter/foundation.dart';
 import '../dashboard/dashboard_factory.dart';
 import '../onenet/onenet_api_client.dart';
 import '../onenet/onenet_mqtt_service.dart';
+import '../onenet/token_log_parser.dart';
 import '../storage/linkbox_repository.dart';
 import '../storage/models.dart';
 import '../thing_model/thing_model_importer.dart';
 import '../thing_model/validators.dart';
+
+class ConnectionImportFile {
+  const ConnectionImportFile({
+    required this.name,
+    required this.bytes,
+  });
+
+  final String name;
+  final Uint8List bytes;
+}
+
+class ConnectionImportResult {
+  const ConnectionImportResult({
+    required this.config,
+    required this.thingModel,
+  });
+
+  final ProjectConfig config;
+  final ThingModelImportResult thingModel;
+}
 
 class LinkBoxState {
   const LinkBoxState({
@@ -143,10 +165,65 @@ class LinkBoxController extends ChangeNotifier {
         state.copyWith(config: config, logs: await _repository.loadLogs()));
   }
 
+  Future<ConnectionImportResult> importConnectionFiles(
+      List<ConnectionImportFile> files) async {
+    if (files.isEmpty) {
+      throw const FormatException('请选择 Token.log 和物模型 JSON');
+    }
+    _setState(state.copyWith(busy: true, statusText: '正在导入连接文件'));
+    try {
+      TokenLogInfo? tokenInfo;
+      ThingModelImportResult? thingModel;
+      for (final file in files) {
+        if (_looksLikeJson(file)) {
+          thingModel = await _importer.importBytes(file.bytes);
+          continue;
+        }
+        tokenInfo = await TokenLogParser().parseBytes(file.bytes);
+      }
+      if (tokenInfo == null) {
+        throw const FormatException('未找到 Token.log 文件');
+      }
+      if (thingModel == null) {
+        throw const FormatException('未找到物模型 JSON 文件');
+      }
+      _ensureProductIdsMatch(tokenInfo.productId, thingModel.productId);
+      final config = _configFromTokenInfo(tokenInfo);
+      await _repository.saveConfig(config);
+      await _repository.upsertProperties(thingModel.properties);
+      final properties = await _repository.loadProperties();
+      await _ensureDashboard(properties);
+      await _log(
+        LogLevel.info,
+        'connection-import',
+        '已导入 Token.log 和物模型，生成 ${thingModel.properties.length} 个属性',
+      );
+      await _reloadCoreState(statusText: '连接文件导入完成，可直接点击连接');
+      return ConnectionImportResult(config: config, thingModel: thingModel);
+    } catch (error) {
+      await _log(LogLevel.error, 'connection-import', '连接文件导入失败',
+          detail: error.toString());
+      _setState(state.copyWith(
+        busy: false,
+        logs: await _repository.loadLogs(),
+        statusText: '连接文件导入失败',
+      ));
+      rethrow;
+    }
+  }
+
   Future<ThingModelImportResult> importThingModel(Uint8List bytes) async {
     _setState(state.copyWith(busy: true, statusText: '正在解析物模型'));
     try {
       final result = await _importer.importBytes(bytes);
+      final config = state.config;
+      if (config.productId.trim().isNotEmpty && result.productId.isNotEmpty) {
+        _ensureProductIdsMatch(config.productId, result.productId);
+      }
+      if (config.productId.trim().isEmpty && result.productId.isNotEmpty) {
+        await _repository
+            .saveConfig(config.copyWith(productId: result.productId));
+      }
       await _repository.upsertProperties(result.properties);
       final properties = await _repository.loadProperties();
       await _ensureDashboard(properties);
@@ -225,6 +302,17 @@ class LinkBoxController extends ChangeNotifier {
       await _reloadLogs();
       return;
     }
+    if (!config.supportsOpenApi) {
+      final values = await _repository.latestValues();
+      await _log(LogLevel.info, 'mqtt', '简单模式使用 MQTT 实时数据，已刷新本地缓存');
+      _setState(state.copyWith(
+        values: values,
+        logs: await _repository.loadLogs(),
+        busy: false,
+        statusText: '已刷新本地缓存',
+      ));
+      return;
+    }
     _setState(state.copyWith(busy: true, statusText: '正在同步最新属性'));
     try {
       final latest = await _apiClient.queryLatest(config);
@@ -262,13 +350,23 @@ class LinkBoxController extends ChangeNotifier {
     }
     try {
       await _mqttService.connect(config);
-      _startPollingFallback();
-      await _log(LogLevel.info, 'mqtt', '应用长连接已启动');
+      if (config.supportsOpenApi) {
+        _startPollingFallback();
+      } else {
+        _pollTimer?.cancel();
+        _pollTimer = null;
+      }
+      await _log(
+        LogLevel.info,
+        'mqtt',
+        config.usesDeviceToken ? '设备 Token MQTT 已启动' : '应用长连接已启动',
+      );
       await _reloadLogs();
     } catch (error) {
-      _startPollingFallback();
-      await _log(LogLevel.error, 'mqtt', '应用长连接失败，已启用 API 轮询',
-          detail: error.toString());
+      if (config.supportsOpenApi) {
+        _startPollingFallback();
+      }
+      await _log(LogLevel.error, 'mqtt', 'MQTT 连接失败', detail: error.toString());
       await _reloadLogs();
     }
   }
@@ -291,11 +389,19 @@ class LinkBoxController extends ChangeNotifier {
     final validation = _validator.validateForControl(property, rawValue);
     if (!validation.isValid) return validation.message;
     try {
-      await _apiClient.setDeviceProperty(
-        config: state.config,
-        identifier: property.identifier,
-        value: validation.value,
-      );
+      if (state.config.usesDeviceToken) {
+        await _mqttService.publishProperty(
+          config: state.config,
+          identifier: property.identifier,
+          value: validation.value,
+        );
+      } else {
+        await _apiClient.setDeviceProperty(
+          config: state.config,
+          identifier: property.identifier,
+          value: validation.value,
+        );
+      }
       final runtimeValue = RuntimeValue(
         identifier: property.identifier,
         value: validation.value,
@@ -322,7 +428,7 @@ class LinkBoxController extends ChangeNotifier {
   Future<List<RuntimeValue>> loadHistory(ThingProperty property) async {
     final now = DateTime.now();
     final start = now.subtract(Duration(days: state.config.historyDays));
-    if (!state.config.isReady) {
+    if (!state.config.isReady || !state.config.supportsOpenApi) {
       return _repository.history(
           identifier: property.identifier, start: start, end: now);
     }
@@ -384,6 +490,52 @@ class LinkBoxController extends ChangeNotifier {
     await _log(LogLevel.info, 'dashboard', '控件已删除');
     _setState(
         state.copyWith(widgets: widgets, logs: await _repository.loadLogs()));
+  }
+
+  bool _looksLikeJson(ConnectionImportFile file) {
+    if (file.name.toLowerCase().endsWith('.json')) return true;
+    try {
+      final decoded = jsonDecode(utf8.decode(file.bytes, allowMalformed: true));
+      return decoded is Map && decoded['properties'] is List;
+    } on FormatException {
+      return false;
+    }
+  }
+
+  ProjectConfig _configFromTokenInfo(TokenLogInfo info) {
+    if (info.deviceKey.trim().isEmpty) {
+      final expiresAt = info.expiresAt;
+      if (info.token.trim().isEmpty) {
+        throw const FormatException('Token.log 中缺少 key 或 Token');
+      }
+      if (expiresAt != null && !expiresAt.isAfter(DateTime.now())) {
+        throw const FormatException('Token.log 中的 Token 已过期且没有 key，无法自动续期');
+      }
+    }
+    return state.config.copyWith(
+      authMode: AuthMode.deviceToken,
+      productId: info.productId,
+      deviceName: info.deviceName,
+      deviceKey: info.deviceKey,
+      deviceToken: info.token,
+      deviceTokenMethod: info.method,
+      deviceTokenVersion: info.version,
+      deviceTokenExpiresAt: info.expiresAt,
+      clearDeviceTokenExpiresAt: info.expiresAt == null,
+      refreshSeconds: state.config.refreshSeconds,
+      historyDays: state.config.historyDays,
+    );
+  }
+
+  void _ensureProductIdsMatch(String left, String right) {
+    final expected = left.trim();
+    final actual = right.trim();
+    if (expected.isEmpty || actual.isEmpty) return;
+    if (expected != actual) {
+      throw FormatException(
+        'Token.log 的 Product ID ($expected) 与物模型 JSON 的 Product ID ($actual) 不一致',
+      );
+    }
   }
 
   Future<void> _ensureDashboard(List<ThingProperty> properties) async {
@@ -489,6 +641,10 @@ class LinkBoxController extends ChangeNotifier {
 
   void _startPollingFallback() {
     _pollTimer?.cancel();
+    if (!state.config.supportsOpenApi) {
+      _pollTimer = null;
+      return;
+    }
     _pollTimer = Timer.periodic(
       Duration(seconds: state.config.refreshSeconds.clamp(5, 3600).toInt()),
       (_) {
