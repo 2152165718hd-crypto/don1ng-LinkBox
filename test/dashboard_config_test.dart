@@ -24,6 +24,36 @@ void main() {
     expect(config.textColor, 0xFF101828);
   });
 
+  test('dashboard widget config round trips svg and keeps png compatibility',
+      () {
+    const config = DashboardWidgetConfig(
+      id: 'w2',
+      pageId: 'main',
+      type: DashboardWidgetType.valueCard,
+      propertyIdentifier: 'Gateway',
+      title: '网关',
+      x: 0,
+      y: 0,
+      width: 180,
+      height: 110,
+      displayMode: DashboardDisplayMode.value,
+      iconKind: DashboardIconKind.builtinSvg,
+      iconValue: 'svg_gateway',
+    );
+
+    final roundTrip = DashboardWidgetConfig.fromMap(config.toDbMap());
+    expect(roundTrip.iconKind, DashboardIconKind.builtinSvg);
+    expect(roundTrip.iconValue, 'svg_gateway');
+
+    final legacyPng = DashboardWidgetConfig.fromMap({
+      ...config.toDbMap(),
+      'icon_kind': 'builtinPng',
+      'icon_value': 'device',
+    });
+    expect(legacyPng.iconKind, DashboardIconKind.builtinPng);
+    expect(legacyPng.iconValue, 'device');
+  });
+
   test('display modes are filtered by property type and write access', () {
     const readOnlyNumber = ThingProperty(
       identifier: 'Temp',
@@ -93,6 +123,14 @@ void main() {
     expect(_widgetsFor(first.widgets, 'Temp', trend: true), hasLength(1));
     expect(_widgetsFor(first.widgets, 'Relay', trend: false), hasLength(1));
     expect(_widgetsFor(first.widgets, 'Relay', trend: true), isEmpty);
+    expect(_widgetsFor(first.widgets, 'Temp', trend: false).single.iconKind,
+        DashboardIconKind.builtinSvg);
+    expect(_widgetsFor(first.widgets, 'Temp', trend: false).single.iconValue,
+        'svg_temperature');
+    expect(_widgetsFor(first.widgets, 'Relay', trend: false).single.iconKind,
+        DashboardIconKind.builtinSvg);
+    expect(_widgetsFor(first.widgets, 'Relay', trend: false).single.iconValue,
+        'svg_relay');
 
     final existingTemp = _widgetsFor(first.widgets, 'Temp', trend: false)
         .single

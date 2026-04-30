@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../core/formatters.dart';
 import '../runtime/linkbox_controller.dart';
@@ -161,6 +162,18 @@ class _ConfiguredIcon extends StatelessWidget {
         final option = LinkBoxIconLibrary.materialByKey(config.iconValue);
         return Icon(option.icon,
             size: size, color: Theme.of(context).colorScheme.primary);
+      case DashboardIconKind.builtinSvg:
+        final icon = LinkBoxIconLibrary.builtinSvgByKey(config.iconValue);
+        return SvgPicture.asset(
+          icon.asset,
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+          colorFilter: ColorFilter.mode(
+            Theme.of(context).colorScheme.primary,
+            BlendMode.srcIn,
+          ),
+        );
       case DashboardIconKind.builtinPng:
         final icon = LinkBoxIconLibrary.builtinByKey(config.iconValue);
         return Image.asset(icon.asset,

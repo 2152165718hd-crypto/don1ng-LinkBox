@@ -55,7 +55,7 @@ class DashboardFactory {
             width: DashboardLayoutConstants.defaultCardWidth,
             height: DashboardLayoutConstants.defaultCardHeight,
             displayMode: mode,
-            iconKind: DashboardIconKind.builtinPng,
+            iconKind: DashboardIconKind.builtinSvg,
             iconValue: defaultBuiltinIconKey(property),
             showUnit: true,
             decimalDigits: property.isNumeric ? 1 : 0,
@@ -76,7 +76,7 @@ class DashboardFactory {
             width: DashboardLayoutConstants.defaultChartWidth,
             height: DashboardLayoutConstants.defaultChartHeight,
             displayMode: DashboardDisplayMode.trendChart,
-            iconKind: DashboardIconKind.builtinPng,
+            iconKind: DashboardIconKind.builtinSvg,
             iconValue: defaultBuiltinIconKey(property),
             showUnit: true,
             decimalDigits: property.isNumeric ? 1 : 0,
@@ -92,23 +92,30 @@ class DashboardFactory {
 
 String defaultBuiltinIconKey(ThingProperty property) {
   final id = '${property.identifier} ${property.name}'.toLowerCase();
-  if (id.contains('temp') || id.contains('温度')) return 'temperature';
-  if (id.contains('hum') || id.contains('湿度')) return 'humidity';
+  if (id.contains('temp') || id.contains('温度')) return 'svg_temperature';
+  if (id.contains('hum') || id.contains('湿度')) return 'svg_humidity';
   if (id.contains('light') || id.contains('illum') || id.contains('光')) {
-    return 'light';
+    return 'svg_light';
   }
   if (id.contains('smoke') || id.contains('gas') || id.contains('烟')) {
-    return 'smoke';
+    return 'svg_smoke';
   }
   if (id.contains('distance') || id.contains('range') || id.contains('距')) {
-    return 'distance';
+    return 'svg_distance';
   }
-  if (id.contains('relay') || id.contains('继电器')) return 'relay';
+  if (id.contains('relay') || id.contains('继电器')) return 'svg_relay';
   if (id.contains('switch') || id.contains('led') || id.contains('灯')) {
-    return 'switch';
+    return 'svg_switch';
   }
-  if (id.contains('motor') || id.contains('电机')) return 'motor';
-  return 'device';
+  if (id.contains('motor') || id.contains('电机')) return 'svg_motor';
+  if (id.contains('battery') || id.contains('电池')) return 'svg_battery';
+  if (id.contains('camera') || id.contains('video') || id.contains('摄像')) {
+    return 'svg_camera';
+  }
+  if (id.contains('lock') || id.contains('door') || id.contains('门锁')) {
+    return 'svg_lock';
+  }
+  return 'svg_device';
 }
 
 _DashboardPosition _nextPosition(List<DashboardWidgetConfig> widgets) {

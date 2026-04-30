@@ -42,6 +42,7 @@ enum DashboardDisplayMode {
 enum DashboardIconKind {
   none,
   material,
+  builtinSvg,
   builtinPng,
   uploadedPng,
 }

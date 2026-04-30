@@ -1,7 +1,7 @@
 name: don1ng_linkbox
 description: don1ng LinkBox - local-first OneNET Studio IoT dashboard framework for Android.
 publish_to: "none"
-version: 0.6.0+7
+version: 0.7.0+8
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -15,6 +15,7 @@ dependencies:
   fl_chart: ^1.2.0
   flutter_riverpod: ^2.6.1
   flutter_secure_storage: ^9.2.4
+  flutter_svg: ^2.2.4
   image_picker: ^1.1.2
   mqtt_client: ^10.5.1
   path: ^1.9.1
@@ -33,3 +34,4 @@ flutter:
     - assets/branding/linkbox_cover.png
     - assets/branding/linkbox_icon_1024.png
     - assets/iot_icons/
+    - assets/vector_icons/

@@ -2,6 +2,49 @@
 
 本项目按 `VERSIONING.md` 维护版本。每个版本必须说明版本定位、相较上一版的变化、迁移或兼容性影响、验证结果和发布产物状态。
 
+## v0.7.0 - 2026-05-01
+
+版本定位：仪表盘 SVG 图标库与图标选择体验版本。
+
+相较 `v0.6.0`：这一版补齐可编辑仪表盘的矢量图标能力，新增内置 SVG 图标资源、分类化 Material 图标库和搜索式图标选择器。新生成的默认面板会优先使用 SVG 图标，同时保留旧版 PNG 图标配置的兼容性。
+
+新增：
+
+- 新增 `flutter_svg` 依赖，用于渲染内置 SVG 图标资源。
+- 新增 `assets/vector_icons/` 内置 SVG 图标库，覆盖设备、温度、湿度、光照、烟雾、距离、开关、继电器、电机、网关、风扇、水泵、阀门、电池、摄像头和门锁。
+- 图标选择器新增搜索框、分类筛选和网格选择体验，Material 图标与内置 SVG 图标均支持分类浏览。
+- Material 图标库扩展到环境、设备、网络、电源、状态、工业、数据和操作等场景。
+- 默认面板生成逻辑改为使用内置 SVG 图标，并新增电池、摄像头、门锁等属性关键词匹配。
+- 新增图标库测试，覆盖图标数量、key 唯一性和 SVG 资源存在性。
+
+变更：
+
+- `DashboardIconKind` 新增 `builtinSvg`，新生成的卡片与趋势图默认使用 SVG 图标。
+- 图标来源切换时会自动修正不匹配的图标值，避免从 Material/PNG/SVG 切换后出现空图标。
+- README 更新为 SVG 图标库、搜索筛选和图标资源目录说明。
+
+兼容性与迁移：
+
+- 无数据库 schema 版本升级。
+- 旧版 `builtinPng` 和 `material` 图标配置继续按名称解析，不受新增 enum 值影响。
+- 旧面板不会被强制改写为 SVG；只有新生成或用户手动选择的卡片使用新 SVG 图标。
+
+验证：
+
+- `flutter pub get` 通过。
+- `dart format lib test` 通过。
+- `flutter analyze` 通过。
+- `flutter test` 通过。
+- `flutter build apk --release` 通过。
+- `apksigner verify --print-certs` 通过。
+
+发布产物：
+
+- GitHub Release：[v0.7.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.7.0)
+- 与上一版对比：[v0.6.0...v0.7.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/compare/v0.6.0...v0.7.0)
+- 本地 APK 归档：`build/app/outputs/versioned-apk/don1ng-LinkBox-v0.7.0-signed.apk`
+- GitHub Release 附件：`don1ng-LinkBox-v0.7.0-signed.apk`
+
 ## v0.6.0 - 2026-05-01
 
 版本定位：连接配置体验与错误诊断增强版本。

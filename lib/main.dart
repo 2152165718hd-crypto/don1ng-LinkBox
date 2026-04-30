@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import 'core/app_theme.dart';
 import 'core/formatters.dart';
@@ -1172,6 +1173,7 @@ class _WidgetStyleSheetState extends State<_WidgetStyleSheet> {
     _displayMode = widget.initial.displayMode;
     _iconKind = widget.initial.iconKind;
     _iconValue = widget.initial.iconValue;
+    _syncIconValueForKind(_iconKind);
     _showUnit = widget.initial.showUnit;
     _backgroundColor = widget.initial.backgroundColor;
     _textColor = widget.initial.textColor;
@@ -1184,6 +1186,41 @@ class _WidgetStyleSheetState extends State<_WidgetStyleSheet> {
     _height.dispose();
     _decimalDigits.dispose();
     super.dispose();
+  }
+
+  void _syncIconValueForKind(
+    DashboardIconKind kind, {
+    DashboardIconKind? previousKind,
+  }) {
+    switch (kind) {
+      case DashboardIconKind.none:
+        _iconValue = '';
+        break;
+      case DashboardIconKind.material:
+        if (!LinkBoxIconLibrary.materialIcons
+            .any((item) => item.key == _iconValue)) {
+          _iconValue = LinkBoxIconLibrary.materialIcons.first.key;
+        }
+        break;
+      case DashboardIconKind.builtinSvg:
+        if (!LinkBoxIconLibrary.builtinSvgIcons
+            .any((item) => item.key == _iconValue)) {
+          _iconValue = LinkBoxIconLibrary.builtinSvgIcons.first.key;
+        }
+        break;
+      case DashboardIconKind.builtinPng:
+        if (!LinkBoxIconLibrary.builtinPngIcons
+            .any((item) => item.key == _iconValue)) {
+          _iconValue = LinkBoxIconLibrary.builtinPngIcons.last.key;
+        }
+        break;
+      case DashboardIconKind.uploadedPng:
+        if (previousKind != null &&
+            previousKind != DashboardIconKind.uploadedPng) {
+          _iconValue = '';
+        }
+        break;
+    }
   }
 
   @override
@@ -1276,15 +1313,10 @@ class _WidgetStyleSheetState extends State<_WidgetStyleSheet> {
                 onChanged: (value) {
                   if (value == null) return;
                   setState(() {
+                    final previousKind = _iconKind;
                     _iconKind = value;
-                    if (_iconKind == DashboardIconKind.material &&
-                        _iconValue.isEmpty) {
-                      _iconValue = LinkBoxIconLibrary.materialIcons.first.key;
-                    }
-                    if (_iconKind == DashboardIconKind.builtinPng &&
-                        _iconValue.isEmpty) {
-                      _iconValue = LinkBoxIconLibrary.builtinPngIcons.last.key;
-                    }
+                    _syncIconValueForKind(_iconKind,
+                        previousKind: previousKind);
                   });
                 },
                 decoration: const InputDecoration(labelText: '图标来源'),
@@ -1437,26 +1469,39 @@ class _IconValueEditor extends StatelessWidget {
             LinkBoxIconLibrary.materialIcons.any((item) => item.key == value)
                 ? value
                 : LinkBoxIconLibrary.materialIcons.first.key;
-        return DropdownButtonFormField<String>(
-          initialValue: current,
-          items: LinkBoxIconLibrary.materialIcons
-              .map(
-                (item) => DropdownMenuItem(
-                  value: item.key,
-                  child: Row(
-                    children: [
-                      Icon(item.icon, size: 20),
-                      const SizedBox(width: 8),
-                      Text(item.label),
-                    ],
-                  ),
-                ),
-              )
-              .toList(),
-          onChanged: (next) {
-            if (next != null) onChanged(next);
-          },
-          decoration: const InputDecoration(labelText: 'Material 矢量图标'),
+        return _IconGridSelector<MaterialIconOption>(
+          title: 'Material 矢量图标',
+          value: current,
+          options: LinkBoxIconLibrary.materialIcons,
+          optionKey: (item) => item.key,
+          optionLabel: (item) => item.label,
+          optionCategory: (item) => item.category,
+          optionKeywords: (item) => item.keywords,
+          iconBuilder: (context, item, color) =>
+              Icon(item.icon, size: 26, color: color),
+          onChanged: onChanged,
+        );
+      case DashboardIconKind.builtinSvg:
+        final current =
+            LinkBoxIconLibrary.builtinSvgIcons.any((item) => item.key == value)
+                ? value
+                : LinkBoxIconLibrary.builtinSvgIcons.first.key;
+        return _IconGridSelector<BuiltinSvgIcon>(
+          title: '内置 SVG 图库',
+          value: current,
+          options: LinkBoxIconLibrary.builtinSvgIcons,
+          optionKey: (item) => item.key,
+          optionLabel: (item) => item.label,
+          optionCategory: (item) => item.category,
+          optionKeywords: (item) => item.keywords,
+          iconBuilder: (context, item, color) => SvgPicture.asset(
+            item.asset,
+            width: 26,
+            height: 26,
+            fit: BoxFit.contain,
+            colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+          ),
+          onChanged: onChanged,
         );
       case DashboardIconKind.builtinPng:
         final current =
@@ -1509,6 +1554,202 @@ class _IconValueEditor extends StatelessWidget {
           ],
         );
     }
+  }
+}
+
+class _IconGridSelector<T> extends StatefulWidget {
+  const _IconGridSelector({
+    required this.title,
+    required this.value,
+    required this.options,
+    required this.optionKey,
+    required this.optionLabel,
+    required this.optionCategory,
+    required this.optionKeywords,
+    required this.iconBuilder,
+    required this.onChanged,
+  });
+
+  final String title;
+  final String value;
+  final List<T> options;
+  final String Function(T item) optionKey;
+  final String Function(T item) optionLabel;
+  final String Function(T item) optionCategory;
+  final List<String> Function(T item) optionKeywords;
+  final Widget Function(BuildContext context, T item, Color color) iconBuilder;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_IconGridSelector<T>> createState() => _IconGridSelectorState<T>();
+}
+
+class _IconGridSelectorState<T> extends State<_IconGridSelector<T>> {
+  static const _allCategories = '全部';
+
+  String _query = '';
+  String _category = _allCategories;
+
+  @override
+  Widget build(BuildContext context) {
+    final categories = [
+      _allCategories,
+      ...{for (final item in widget.options) widget.optionCategory(item)},
+    ];
+    final selectedCategory =
+        categories.contains(_category) ? _category : _allCategories;
+    final filtered = widget.options.where((item) {
+      final category = widget.optionCategory(item);
+      if (selectedCategory != _allCategories && category != selectedCategory) {
+        return false;
+      }
+      final query = _query.trim().toLowerCase();
+      if (query.isEmpty) return true;
+      final searchable = [
+        widget.optionKey(item),
+        widget.optionLabel(item),
+        category,
+        ...widget.optionKeywords(item),
+      ].join(' ').toLowerCase();
+      return searchable.contains(query);
+    }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(widget.title, style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        TextField(
+          decoration: const InputDecoration(
+            isDense: true,
+            prefixIcon: Icon(Icons.search),
+            labelText: '搜索图标',
+          ),
+          onChanged: (value) => setState(() => _query = value),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 36,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: categories.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final category = categories[index];
+              return ChoiceChip(
+                selected: selectedCategory == category,
+                label: Text(category),
+                onSelected: (_) => setState(() => _category = category),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 284,
+          child: filtered.isEmpty
+              ? Center(
+                  child: Text(
+                    '未找到匹配图标',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                )
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final rawCount = (constraints.maxWidth / 84).floor();
+                    final crossAxisCount = rawCount.clamp(3, 6).toInt();
+                    return GridView.builder(
+                      itemCount: filtered.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossAxisCount,
+                        mainAxisExtent: 76,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                      ),
+                      itemBuilder: (context, index) {
+                        final item = filtered[index];
+                        final key = widget.optionKey(item);
+                        final selected = key == widget.value;
+                        return _IconGridTile<T>(
+                          item: item,
+                          label: widget.optionLabel(item),
+                          selected: selected,
+                          iconBuilder: widget.iconBuilder,
+                          onTap: () => widget.onChanged(key),
+                        );
+                      },
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _IconGridTile<T> extends StatelessWidget {
+  const _IconGridTile({
+    required this.item,
+    required this.label,
+    required this.selected,
+    required this.iconBuilder,
+    required this.onTap,
+  });
+
+  final T item;
+  final String label;
+  final bool selected;
+  final Widget Function(BuildContext context, T item, Color color) iconBuilder;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final foreground =
+        selected ? colorScheme.onPrimaryContainer : colorScheme.onSurface;
+    final background =
+        selected ? colorScheme.primaryContainer : colorScheme.surface;
+    final borderColor =
+        selected ? colorScheme.primary : colorScheme.outlineVariant;
+
+    return Tooltip(
+      message: label,
+      child: Material(
+        color: background,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: borderColor),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox.square(
+                  dimension: 28,
+                  child: Center(child: iconBuilder(context, item, foreground)),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: foreground,
+                        fontWeight:
+                            selected ? FontWeight.w700 : FontWeight.w500,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -1784,6 +2025,7 @@ String _iconKindLabel(DashboardIconKind kind) {
   return switch (kind) {
     DashboardIconKind.none => '无图标',
     DashboardIconKind.material => 'Material 矢量图标',
+    DashboardIconKind.builtinSvg => '内置 SVG 图库',
     DashboardIconKind.builtinPng => '内置 PNG 图库',
     DashboardIconKind.uploadedPng => '上传 PNG',
   };
