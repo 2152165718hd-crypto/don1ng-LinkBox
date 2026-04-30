@@ -68,50 +68,44 @@ void main() {
     );
   });
 
-  test('imports Token.log and thing model as ready simple connection',
-      () async {
+  test('imports Token.log as ready simple connection', () async {
     final repository = _FakeRepository(config: ProjectConfig.empty());
     final controller = LinkBoxController(repository: repository);
     addTearDown(controller.dispose);
 
     await controller.init();
-    final result = await controller.importConnectionFiles([
+    final config = await controller.importTokenLog(
       ConnectionImportFile(
         name: 'Token.log',
         bytes: Uint8List.fromList(utf8.encode(_tokenLogText)),
       ),
-      ConnectionImportFile(
-        name: 'thing.json',
-        bytes: Uint8List.fromList(utf8.encode(_thingModelJson('5X53hoeOP1'))),
-      ),
-    ]);
+    );
 
-    expect(result.config.authMode, AuthMode.deviceToken);
+    expect(config.authMode, AuthMode.deviceToken);
     expect(controller.state.config.isReady, isTrue);
     expect(controller.state.config.productId, '5X53hoeOP1');
     expect(controller.state.config.deviceName, 'don1ng');
-    expect(controller.state.properties, isNotEmpty);
-    expect(controller.state.widgets, isNotEmpty);
+    expect(controller.state.properties, isEmpty);
+    expect(controller.state.widgets, isEmpty);
   });
 
-  test('rejects connection import when product ids do not match', () async {
+  test('rejects thing model import when product ids do not match', () async {
     final repository = _FakeRepository(config: ProjectConfig.empty());
     final controller = LinkBoxController(repository: repository);
     addTearDown(controller.dispose);
 
     await controller.init();
+    await controller.importTokenLog(
+      ConnectionImportFile(
+        name: 'Token.log',
+        bytes: Uint8List.fromList(utf8.encode(_tokenLogText)),
+      ),
+    );
 
     expect(
-      () => controller.importConnectionFiles([
-        ConnectionImportFile(
-          name: 'Token.log',
-          bytes: Uint8List.fromList(utf8.encode(_tokenLogText)),
-        ),
-        ConnectionImportFile(
-          name: 'thing.json',
-          bytes: Uint8List.fromList(utf8.encode(_thingModelJson('other'))),
-        ),
-      ]),
+      () => controller.importThingModel(
+        Uint8List.fromList(utf8.encode(_thingModelJson('other'))),
+      ),
       throwsA(
         isA<FormatException>().having(
           (error) => error.message,
@@ -244,6 +238,51 @@ void main() {
       controller.state.connectionState,
       OnenetMqttConnectionState.connected,
     );
+  });
+
+  test('connectRealtime returns missing-field diagnostics', () async {
+    final repository = _FakeRepository(config: ProjectConfig.empty());
+    final controller = LinkBoxController(repository: repository);
+    addTearDown(controller.dispose);
+
+    await controller.init();
+    final failure = await controller.connectRealtime();
+
+    expect(failure, isNotNull);
+    expect(failure!.field, contains('Product ID'));
+    expect(failure.field, contains('Device Name'));
+    expect(failure.field, contains('Device Key 或 Token'));
+    expect(failure.suggestion, contains('Token.log'));
+  });
+
+  test('connectRealtime returns actionable diagnostics when MQTT rejects login',
+      () async {
+    const simpleConfig = ProjectConfig(
+      projectId: '',
+      groupId: '',
+      accessKey: '',
+      productId: '5X53hoeOP1',
+      deviceName: 'don1ng',
+      deviceToken: 'version=2018-10-31&sign=bad',
+    );
+    final repository = _FakeRepository(config: simpleConfig);
+    final mqttService = _FailingMqttService(
+      StateError('MQTT 连接失败: badUsernameOrPassword'),
+    );
+    final controller = LinkBoxController(
+      repository: repository,
+      mqttService: mqttService,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.init();
+    final failure = await controller.connectRealtime();
+
+    expect(failure, isNotNull);
+    expect(failure!.field, contains('Token'));
+    expect(failure.reason, contains('OneNET 拒绝'));
+    expect(failure.suggestion, contains('重新导入 Token.log'));
+    expect(controller.state.connectionState, OnenetMqttConnectionState.failed);
   });
 }
 
@@ -472,5 +511,16 @@ class _FakeMqttService extends OnenetMqttService {
   Future<void> dispose() async {
     await _messages.close();
     await _states.close();
+  }
+}
+
+class _FailingMqttService extends _FakeMqttService {
+  _FailingMqttService(this.error);
+
+  final Object error;
+
+  @override
+  Future<void> connect(ProjectConfig config) async {
+    throw error;
   }
 }

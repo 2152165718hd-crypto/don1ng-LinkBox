@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -23,14 +22,18 @@ class ConnectionImportFile {
   final Uint8List bytes;
 }
 
-class ConnectionImportResult {
-  const ConnectionImportResult({
-    required this.config,
-    required this.thingModel,
+class ConnectionFailureInfo {
+  const ConnectionFailureInfo({
+    required this.field,
+    required this.reason,
+    required this.suggestion,
+    this.detail = '',
   });
 
-  final ProjectConfig config;
-  final ThingModelImportResult thingModel;
+  final String field;
+  final String reason;
+  final String suggestion;
+  final String detail;
 }
 
 class LinkBoxState {
@@ -165,48 +168,26 @@ class LinkBoxController extends ChangeNotifier {
         state.copyWith(config: config, logs: await _repository.loadLogs()));
   }
 
-  Future<ConnectionImportResult> importConnectionFiles(
-      List<ConnectionImportFile> files) async {
-    if (files.isEmpty) {
-      throw const FormatException('请选择 Token.log 和物模型 JSON');
-    }
-    _setState(state.copyWith(busy: true, statusText: '正在导入连接文件'));
+  Future<ProjectConfig> importTokenLog(ConnectionImportFile file) async {
+    _setState(state.copyWith(busy: true, statusText: '正在导入 Token.log'));
     try {
-      TokenLogInfo? tokenInfo;
-      ThingModelImportResult? thingModel;
-      for (final file in files) {
-        if (_looksLikeJson(file)) {
-          thingModel = await _importer.importBytes(file.bytes);
-          continue;
-        }
-        tokenInfo = await TokenLogParser().parseBytes(file.bytes);
-      }
-      if (tokenInfo == null) {
-        throw const FormatException('未找到 Token.log 文件');
-      }
-      if (thingModel == null) {
-        throw const FormatException('未找到物模型 JSON 文件');
-      }
-      _ensureProductIdsMatch(tokenInfo.productId, thingModel.productId);
+      final tokenInfo = await TokenLogParser().parseBytes(file.bytes);
       final config = _configFromTokenInfo(tokenInfo);
       await _repository.saveConfig(config);
-      await _repository.upsertProperties(thingModel.properties);
-      final properties = await _repository.loadProperties();
-      await _ensureDashboard(properties);
       await _log(
         LogLevel.info,
-        'connection-import',
-        '已导入 Token.log 和物模型，生成 ${thingModel.properties.length} 个属性',
+        'token-log',
+        '已导入 Token.log：${config.productId}/${config.deviceName}',
       );
-      await _reloadCoreState(statusText: '连接文件导入完成，可直接点击连接');
-      return ConnectionImportResult(config: config, thingModel: thingModel);
+      await _reloadCoreState(statusText: 'Token.log 导入完成，可直接点击连接');
+      return config;
     } catch (error) {
-      await _log(LogLevel.error, 'connection-import', '连接文件导入失败',
+      await _log(LogLevel.error, 'token-log', 'Token.log 导入失败',
           detail: error.toString());
       _setState(state.copyWith(
         busy: false,
         logs: await _repository.loadLogs(),
-        statusText: '连接文件导入失败',
+        statusText: 'Token.log 导入失败',
       ));
       rethrow;
     }
@@ -341,12 +322,14 @@ class LinkBoxController extends ChangeNotifier {
     }
   }
 
-  Future<void> connectRealtime() async {
+  Future<ConnectionFailureInfo?> connectRealtime() async {
     final config = state.config;
-    if (!config.isReady) {
-      await _log(LogLevel.warning, 'mqtt', '请先填写完整 OneNET 配置');
+    final configIssue = _connectionConfigIssue(config);
+    if (configIssue != null) {
+      await _log(LogLevel.warning, 'mqtt', configIssue.reason,
+          detail: configIssue.detail);
       await _reloadLogs();
-      return;
+      return configIssue;
     }
     try {
       await _mqttService.connect(config);
@@ -362,12 +345,21 @@ class LinkBoxController extends ChangeNotifier {
         config.usesDeviceToken ? '设备 Token MQTT 已启动' : '应用长连接已启动',
       );
       await _reloadLogs();
+      return null;
     } catch (error) {
       if (config.supportsOpenApi) {
         _startPollingFallback();
       }
-      await _log(LogLevel.error, 'mqtt', 'MQTT 连接失败', detail: error.toString());
-      await _reloadLogs();
+      final failure = _connectionFailureForError(error, config);
+      await _log(LogLevel.error, 'mqtt', failure.reason,
+          detail: error.toString());
+      _setState(state.copyWith(
+        busy: false,
+        connectionState: OnenetMqttConnectionState.failed,
+        logs: await _repository.loadLogs(),
+        statusText: '连接失败',
+      ));
+      return failure;
     }
   }
 
@@ -492,16 +484,6 @@ class LinkBoxController extends ChangeNotifier {
         state.copyWith(widgets: widgets, logs: await _repository.loadLogs()));
   }
 
-  bool _looksLikeJson(ConnectionImportFile file) {
-    if (file.name.toLowerCase().endsWith('.json')) return true;
-    try {
-      final decoded = jsonDecode(utf8.decode(file.bytes, allowMalformed: true));
-      return decoded is Map && decoded['properties'] is List;
-    } on FormatException {
-      return false;
-    }
-  }
-
   ProjectConfig _configFromTokenInfo(TokenLogInfo info) {
     if (info.deviceKey.trim().isEmpty) {
       final expiresAt = info.expiresAt;
@@ -533,9 +515,113 @@ class LinkBoxController extends ChangeNotifier {
     if (expected.isEmpty || actual.isEmpty) return;
     if (expected != actual) {
       throw FormatException(
-        'Token.log 的 Product ID ($expected) 与物模型 JSON 的 Product ID ($actual) 不一致',
+        '当前 Product ID ($expected) 与物模型 JSON 的 Product ID ($actual) 不一致',
       );
     }
+  }
+
+  ConnectionFailureInfo? _connectionConfigIssue(ProjectConfig config) {
+    final missing = <String>[];
+    if (config.productId.trim().isEmpty) missing.add('Product ID');
+    if (config.deviceName.trim().isEmpty) missing.add('Device Name');
+
+    if (config.authMode == AuthMode.deviceToken) {
+      final expiresAt = config.deviceTokenExpiresAt;
+      final hasKey = config.deviceKey.trim().isNotEmpty;
+      final hasToken = config.deviceToken.trim().isNotEmpty;
+      if (!hasKey && !hasToken) {
+        missing.add('Device Key 或 Token');
+      } else if (!hasKey &&
+          hasToken &&
+          expiresAt != null &&
+          !expiresAt.isAfter(DateTime.now())) {
+        return const ConnectionFailureInfo(
+          field: 'Token',
+          reason: 'Token 已过期，不能继续用于设备 MQTT 登录。',
+          suggestion:
+              '重新从 OneNET Studio 导出 Token.log，或在手动填写里改填 Device Key 让应用自动生成新 Token。',
+        );
+      }
+    } else {
+      if (config.projectId.trim().isEmpty) missing.add('Project ID');
+      if (config.authMode == AuthMode.user) {
+        if (config.userId.trim().isEmpty) missing.add('User ID');
+      } else if (config.groupId.trim().isEmpty) {
+        missing.add('Group ID');
+      }
+      if (config.accessKey.trim().isEmpty) missing.add('Access Key');
+    }
+
+    if (missing.isEmpty) return null;
+    return ConnectionFailureInfo(
+      field: missing.join('、'),
+      reason: '连接信息不完整：${missing.join('、')} 不能为空。',
+      suggestion: config.authMode == AuthMode.deviceToken
+          ? '在设备页导入 Token.log，或手动填写 Product ID、Device Name，并至少填写 Device Key 或 Token。'
+          : '在高级应用接入中补齐应用鉴权字段，再重新连接。',
+    );
+  }
+
+  ConnectionFailureInfo _connectionFailureForError(
+    Object error,
+    ProjectConfig config,
+  ) {
+    final detail = error.toString();
+    if (error is FormatException) {
+      final message = error.message;
+      final field = message.contains('AccessKey')
+          ? 'Access Key'
+          : message.contains('DeviceKey') || message.contains('key')
+              ? 'Device Key'
+              : message.contains('Token')
+                  ? 'Token'
+                  : '鉴权信息';
+      return ConnectionFailureInfo(
+        field: field,
+        reason: message,
+        suggestion: field == 'Access Key'
+            ? '复制 OneNET Studio 里的完整 AccessKey，确认没有空格或换行。'
+            : '重新复制 OneNET Studio 里的 Device Key 或 Token；如果使用 Token，确认没有过期。',
+        detail: detail,
+      );
+    }
+    if (error is SocketException) {
+      return ConnectionFailureInfo(
+        field: '网络连接',
+        reason: '无法连接 OneNET MQTT 服务器。',
+        suggestion:
+            '检查当前网络、DNS、代理或防火墙是否允许访问 studio-mqtt.heclouds.com:8883，然后重新连接。',
+        detail: detail,
+      );
+    }
+    if (error is HandshakeException) {
+      return ConnectionFailureInfo(
+        field: 'TLS 连接',
+        reason: 'MQTT TLS 握手失败。',
+        suggestion: '检查设备时间、系统证书和网络代理；确认 8883 端口没有被拦截。',
+        detail: detail,
+      );
+    }
+    if (detail.contains('badUsernameOrPassword') ||
+        detail.contains('notAuthorized') ||
+        detail.contains('MQTT 连接失败')) {
+      return ConnectionFailureInfo(
+        field: config.usesDeviceToken
+            ? 'Product ID / Device Name / Token'
+            : '应用鉴权',
+        reason: 'OneNET 拒绝 MQTT 登录。',
+        suggestion: config.usesDeviceToken
+            ? '确认 Product ID、Device Name 与 OneNET 设备一致；重新导入 Token.log，或改填 Device Key 自动生成 Token。'
+            : '确认 Project ID、Group ID/User ID、AccessKey 和设备信息都来自同一 OneNET 项目。',
+        detail: detail,
+      );
+    }
+    return ConnectionFailureInfo(
+      field: '连接',
+      reason: 'MQTT 连接失败。',
+      suggestion: '检查 OneNET 设备是否启用 MQTT、当前网络是否可访问 OneNET，并重新核对所有连接字段。',
+      detail: detail,
+    );
   }
 
   Future<void> _ensureDashboard(List<ThingProperty> properties) async {

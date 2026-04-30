@@ -2,6 +2,51 @@
 
 本项目按 `VERSIONING.md` 维护版本。每个版本必须说明版本定位、相较上一版的变化、迁移或兼容性影响、验证结果和发布产物状态。
 
+## v0.6.0 - 2026-05-01
+
+版本定位：连接配置体验与错误诊断增强版本。
+
+相较 `v0.5.0`：这一版把设备连接流程从“同时导入 Token.log 与物模型 JSON”调整为“Token.log/手动连接信息”和“物模型 JSON”分开维护。用户可以直接手动填写 `Product ID`、`Device Name`、`Device Key` 或 `Token`，连接失败时 App 会返回明确的出错位置、原因和处理建议。
+
+新增：
+
+- 设备页新增连接方式下拉框，可在简单设备 Token、高级项目分组鉴权和高级用户鉴权之间直接切换。
+- 简单设备 Token 模式新增 `Device Key / key` 和 `Token / token` 手动输入框。
+- 连接动作会先保存当前表单，再发起 MQTT 连接，避免手动修改后忘记保存。
+- 新增连接失败诊断弹窗，覆盖缺失字段、Token 过期、鉴权格式错误、OneNET 拒绝登录、网络连接和 TLS 握手问题。
+- 控制器新增 `ConnectionFailureInfo`，让连接失败原因可以被 UI 和测试明确消费。
+- 新增控制器测试，覆盖缺失字段诊断和 OneNET MQTT 拒绝登录诊断。
+
+变更：
+
+- Token.log 导入改为单文件导入，只负责连接身份和设备 Token 信息。
+- 物模型 JSON 回到物模型页单独导入，并继续校验 Product ID 是否与当前连接配置一致。
+- 配置状态卡不再要求已有物模型属性才显示“连接信息已就绪”。
+- 高级应用接入仅在选择高级鉴权模式时展示，减少简单模式下的干扰字段。
+- README 更新为 Token.log/手动填写和物模型单独导入流程。
+
+兼容性与迁移：
+
+- 无数据库 schema 版本升级。
+- 现有 `v0.5.0` 配置可以继续使用；已保存的 DeviceKey、Token、AccessKey 仍从安全存储读取。
+- 物模型数据不受影响，但新流程要求在物模型页单独导入或维护物模型 JSON。
+
+验证：
+
+- `flutter pub get` 通过。
+- `dart format lib test` 通过。
+- `flutter analyze` 通过。
+- `flutter test` 通过。
+- `flutter build apk --release` 通过。
+- `apksigner verify --print-certs` 通过。
+
+发布产物：
+
+- GitHub Release：[v0.6.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.6.0)
+- 与上一版对比：[v0.5.0...v0.6.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/compare/v0.5.0...v0.6.0)
+- 本地 APK 归档：`build/app/outputs/versioned-apk/don1ng-LinkBox-v0.6.0-signed.apk`
+- GitHub Release 附件：`don1ng-LinkBox-v0.6.0-signed.apk`
+
 ## v0.5.0 - 2026-04-30
 
 版本定位：设备 Token 快速接入与简单 MQTT 控制版本。
