@@ -6,10 +6,10 @@ don1ng LinkBox 是一个 Flutter Android 应用，用于把 OneNET Studio 物模
 
 ## 当前版本
 
-- 最新版本：`v0.3.0`
-- 应用版本：`0.3.0+3`
-- Release 页面：[don1ng LinkBox v0.3.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.3.0)
-- 状态：Android MVP，可运行源码版本；正式签名 APK 尚未配置发布。
+- 最新版本：`v0.3.1`
+- 应用版本：`0.3.1+4`
+- Release 页面：[don1ng LinkBox v0.3.1](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.3.1)
+- 状态：Android MVP；Release 支持本地签名 APK 构建，签名密钥不提交到仓库。
 - 更新日志：[CHANGELOG.md](CHANGELOG.md)
 - 版本管理规范：[VERSIONING.md](VERSIONING.md)
 
@@ -71,7 +71,7 @@ flutter build apk --release
 build/app/outputs/flutter-apk/app-release.apk
 ```
 
-注意：仓库当前没有提交正式签名配置。面向用户分发 APK 前，需要先配置 Android release signing，并确认 APK 可以通过 `apksigner verify`。
+Release 构建会读取本机 `android/key.properties` 中的签名配置。该文件和 keystore 已加入 `.gitignore`，不要提交到仓库。面向用户分发 APK 前，请确认产物可以通过 `apksigner verify`。
 
 ## OneNET 配置
 

@@ -2,6 +2,44 @@
 
 本项目按 `VERSIONING.md` 维护版本。每个版本必须说明版本定位、相较上一版的变化、迁移或兼容性影响、验证结果和发布产物状态。
 
+## v0.3.1 - 2026-04-30
+
+版本定位：Android 签名发布补丁版。
+
+相较 `v0.3.0`：这一版不改变 App 功能，重点补齐 Android release signing 配置，使 Release 可以附带经过 `apksigner verify` 验证的 APK。
+
+新增：
+
+- Android release 构建读取本机 `android/key.properties` 和 keystore。
+- Release 构建缺少签名配置时会直接失败，避免误产出未签名 APK。
+- `.gitignore` 明确屏蔽 `android/key.properties`、`.jks` 和 `.keystore`，避免签名密钥入库。
+
+变更：
+
+- README 的 APK 构建说明改为签名配置说明。
+
+兼容性与迁移：
+
+- 无数据库 schema 版本升级。
+- 构建 Release APK 前，本机必须存在 `android/key.properties` 和对应 keystore。
+- 签名文件仅用于本地打包，不纳入 Git 仓库。
+
+验证：
+
+- `flutter pub get` 通过。
+- `dart format lib test` 通过。
+- `flutter analyze` 通过。
+- `flutter test` 通过。
+- `flutter build apk --release` 通过。
+- `apksigner verify --print-certs` 通过。
+
+发布产物：
+
+- GitHub Release：[v0.3.1](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.3.1)
+- 与上一版对比：[v0.3.0...v0.3.1](https://github.com/2152165718hd-crypto/don1ng-LinkBox/compare/v0.3.0...v0.3.1)
+- 本地 APK 归档：`build/app/outputs/versioned-apk/don1ng-LinkBox-v0.3.1-signed.apk`
+- GitHub Release 附件：`don1ng-LinkBox-v0.3.1-signed.apk`
+
 ## v0.3.0 - 2026-04-29
 
 版本定位：连接稳定性、备份恢复和本地数据维护版本。

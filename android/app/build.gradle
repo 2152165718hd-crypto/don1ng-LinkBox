@@ -4,6 +4,30 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { stream ->
+        keystoreProperties.load(stream)
+    }
+}
+
+def hasReleaseSigning = keystoreProperties["storeFile"] &&
+        keystoreProperties["storePassword"] &&
+        keystoreProperties["keyAlias"] &&
+        keystoreProperties["keyPassword"]
+
+gradle.taskGraph.whenReady { taskGraph ->
+    def requiresReleaseSigning = taskGraph.allTasks.any { task ->
+        task.path == ":app:assembleRelease" ||
+                task.path == ":app:packageRelease" ||
+                task.path == ":app:bundleRelease"
+    }
+    if (requiresReleaseSigning && !hasReleaseSigning) {
+        throw new GradleException("Missing release signing config. Create android/key.properties before building a release APK.")
+    }
+}
+
 android {
     namespace = "com.don1ng.linkbox"
     compileSdk = flutter.compileSdkVersion
@@ -24,6 +48,25 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile = rootProject.file(keystoreProperties["storeFile"])
+                storePassword = keystoreProperties["storePassword"]
+                keyAlias = keystoreProperties["keyAlias"]
+                keyPassword = keystoreProperties["keyPassword"]
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.release
+            }
+        }
     }
 }
 
