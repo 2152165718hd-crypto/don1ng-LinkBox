@@ -225,6 +225,16 @@ class LinkBoxRepository {
         where: 'property_identifier = ?', whereArgs: [identifier]);
   }
 
+  Future<void> clearThingModel() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('thing_properties');
+      await txn.delete('dashboard_widgets');
+      await txn.delete('dashboard_pages');
+      await txn.delete('runtime_values');
+    });
+  }
+
   Future<List<DashboardPageConfig>> loadPages() async {
     final db = await database;
     final rows = await db.query('dashboard_pages', orderBy: 'order_index ASC');

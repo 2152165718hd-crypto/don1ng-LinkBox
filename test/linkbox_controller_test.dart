@@ -27,6 +27,19 @@ void main() {
     max: 100,
     rawType: 'int32',
   );
+  const mainPage = DashboardPageConfig(id: 'main', name: '主面板');
+  const speedWidget = DashboardWidgetConfig(
+    id: 'speed_card',
+    pageId: 'main',
+    type: DashboardWidgetType.valueCard,
+    propertyIdentifier: 'Speed',
+    title: '速度',
+    x: 0,
+    y: 0,
+    width: 180,
+    height: 110,
+    displayMode: DashboardDisplayMode.value,
+  );
 
   test('imports thing model and generates dashboard widgets', () async {
     final repository = _FakeRepository(config: config);
@@ -51,6 +64,61 @@ void main() {
           .where((item) => item.propertyIdentifier == 'Speed'),
       isNotEmpty,
     );
+  });
+
+  test('clears thing model dashboard and local runtime values', () async {
+    final repository = _FakeRepository(
+      config: config,
+      properties: [speed],
+      pages: [mainPage],
+      widgets: [speedWidget],
+      cachedValues: [
+        RuntimeValue(identifier: 'Speed', value: 42, time: DateTime.now()),
+      ],
+    );
+    final controller = LinkBoxController(repository: repository);
+    addTearDown(controller.dispose);
+
+    await controller.init();
+    expect(controller.state.properties, isNotEmpty);
+    expect(controller.state.pages, isNotEmpty);
+    expect(controller.state.widgets, isNotEmpty);
+    expect(controller.state.values, isNotEmpty);
+
+    await controller.clearThingModel();
+
+    expect(controller.state.properties, isEmpty);
+    expect(controller.state.pages, isEmpty);
+    expect(controller.state.widgets, isEmpty);
+    expect(controller.state.values, isEmpty);
+    expect(repository.cachedValues, isEmpty);
+  });
+
+  test('clearThingModel disconnects MQTT and stops polling fallback', () async {
+    final repository = _FakeRepository(
+      config: config,
+      properties: [speed],
+      pages: [mainPage],
+      widgets: [speedWidget],
+    );
+    final mqttService = _FakeMqttService();
+    final controller = LinkBoxController(
+      repository: repository,
+      mqttService: mqttService,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.init();
+    await controller.connectRealtime();
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.pollingFallbackActive, isTrue);
+    expect(mqttService.connected, isTrue);
+
+    await controller.clearThingModel();
+
+    expect(controller.pollingFallbackActive, isFalse);
+    expect(mqttService.disconnectCalls, 1);
+    expect(mqttService.connected, isFalse);
   });
 
   test('sendControl validates and dispatches writable values', () async {
@@ -99,14 +167,20 @@ class _FakeRepository extends LinkBoxRepository {
   _FakeRepository({
     required this.config,
     List<ThingProperty> properties = const [],
-  }) : properties = List<ThingProperty>.of(properties);
+    List<DashboardPageConfig> pages = const [],
+    List<DashboardWidgetConfig> widgets = const [],
+    List<RuntimeValue> cachedValues = const [],
+  })  : properties = List<ThingProperty>.of(properties),
+        pages = List<DashboardPageConfig>.of(pages),
+        widgets = List<DashboardWidgetConfig>.of(widgets),
+        cachedValues = List<RuntimeValue>.of(cachedValues);
 
   ProjectConfig config;
   List<ThingProperty> properties;
-  List<DashboardPageConfig> pages = [];
-  List<DashboardWidgetConfig> widgets = [];
+  List<DashboardPageConfig> pages;
+  List<DashboardWidgetConfig> widgets;
   List<AppLogEntry> logs = [];
-  List<RuntimeValue> cachedValues = [];
+  List<RuntimeValue> cachedValues;
 
   @override
   Future<ProjectConfig> loadConfig() async => config;
@@ -129,6 +203,14 @@ class _FakeRepository extends LinkBoxRepository {
       byId[property.identifier] = property;
     }
     this.properties = byId.values.toList();
+  }
+
+  @override
+  Future<void> clearThingModel() async {
+    properties = [];
+    pages = [];
+    widgets = [];
+    cachedValues = [];
   }
 
   @override
@@ -238,6 +320,7 @@ class _FakeMqttService extends OnenetMqttService {
   final _messages = StreamController<OnenetRealtimeMessage>.broadcast();
   final _states = StreamController<OnenetMqttConnectionState>.broadcast();
   bool connected = false;
+  int disconnectCalls = 0;
 
   @override
   Stream<OnenetRealtimeMessage> get messages => _messages.stream;
@@ -253,6 +336,7 @@ class _FakeMqttService extends OnenetMqttService {
 
   @override
   Future<void> disconnect() async {
+    disconnectCalls += 1;
     connected = false;
     _states.add(OnenetMqttConnectionState.disconnected);
   }

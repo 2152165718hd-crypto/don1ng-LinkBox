@@ -541,7 +541,13 @@ class _ThingModelScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final properties = controller.state.properties;
+    final state = controller.state;
+    final properties = state.properties;
+    final hasThingModelData = properties.isNotEmpty ||
+        state.pages.isNotEmpty ||
+        state.widgets.isNotEmpty ||
+        state.values.isNotEmpty;
+    final scheme = Theme.of(context).colorScheme;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -558,6 +564,17 @@ class _ThingModelScreen extends StatelessWidget {
               onPressed: controller.regenerateDashboard,
               icon: const Icon(Icons.auto_awesome_motion),
               label: const Text('补齐默认面板'),
+            ),
+            OutlinedButton.icon(
+              onPressed: hasThingModelData && !state.busy
+                  ? () => _confirmClearThingModel(context)
+                  : null,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: scheme.error,
+                side: BorderSide(color: scheme.error),
+              ),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('删除物模型'),
             ),
           ],
         ),
@@ -611,6 +628,45 @@ class _ThingModelScreen extends StatelessWidget {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('导入失败: $error')));
       }
+    }
+  }
+
+  Future<void> _confirmClearThingModel(BuildContext context) async {
+    final scheme = Theme.of(context).colorScheme;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('删除当前物模型？'),
+          content: const Text(
+            '将删除已导入的物模型、面板配置和本地历史数据，并断开当前实时连接。云平台配置和日志会保留。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: scheme.error,
+                foregroundColor: scheme.onError,
+              ),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('删除'),
+            ),
+          ],
+        );
+      },
+    );
+    if (!context.mounted || confirmed != true) return;
+    try {
+      await controller.clearThingModel();
+      if (!context.mounted) return;
+      _showSnackBar(context, '物模型已删除');
+    } catch (error) {
+      if (!context.mounted) return;
+      _showSnackBar(context, '删除失败: $error');
     }
   }
 }

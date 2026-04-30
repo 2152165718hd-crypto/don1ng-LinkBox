@@ -2,6 +2,46 @@
 
 本项目按 `VERSIONING.md` 维护版本。每个版本必须说明版本定位、相较上一版的变化、迁移或兼容性影响、验证结果和发布产物状态。
 
+## v0.4.0 - 2026-04-30
+
+版本定位：物模型重置与本地数据清理版本。
+
+相较 `v0.3.1`：这一版新增物模型删除流程，让用户可以在保留云平台配置和日志的前提下，清空当前设备物模型、面板配置和本地历史数据，便于切换设备或重新导入物模型。
+
+新增：
+
+- 物模型页新增“删除物模型”操作。
+- 删除前弹窗确认，明确说明会删除物模型、面板配置和本地历史数据，并断开实时连接。
+- 控制器新增 `clearThingModel()`，统一停止轮询、断开 MQTT、清理仓库数据并刷新状态。
+- 仓库新增 `clearThingModel()`，事务性清空 `thing_properties`、`dashboard_widgets`、`dashboard_pages` 和 `runtime_values`。
+- 新增控制器测试，覆盖删除物模型后状态清空、历史数据清理、MQTT 断开和轮询停止。
+
+变更：
+
+- 物模型页会在已有物模型、面板、控件或本地值时启用删除入口。
+- 删除物模型时保留项目配置和应用日志。
+
+兼容性与迁移：
+
+- 无数据库 schema 版本升级。
+- 删除操作是破坏性本地操作，但只影响本地物模型、面板和历史缓存，不删除 OneNET 云端设备或项目配置。
+
+验证：
+
+- `flutter pub get` 通过。
+- `dart format lib test` 通过。
+- `flutter analyze` 通过。
+- `flutter test` 通过。
+- `flutter build apk --release` 通过。
+- `apksigner verify --print-certs` 通过。
+
+发布产物：
+
+- GitHub Release：[v0.4.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.4.0)
+- 与上一版对比：[v0.3.1...v0.4.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/compare/v0.3.1...v0.4.0)
+- 本地 APK 归档：`build/app/outputs/versioned-apk/don1ng-LinkBox-v0.4.0-signed.apk`
+- GitHub Release 附件：`don1ng-LinkBox-v0.4.0-signed.apk`
+
 ## v0.3.1 - 2026-04-30
 
 版本定位：Android 签名发布补丁版。

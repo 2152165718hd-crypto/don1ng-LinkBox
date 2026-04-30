@@ -171,6 +171,27 @@ class LinkBoxController extends ChangeNotifier {
     await _reloadCoreState(statusText: '默认 UI 已补齐');
   }
 
+  Future<void> clearThingModel() async {
+    _setState(state.copyWith(busy: true, statusText: '正在删除物模型'));
+    try {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+      await _mqttService.disconnect();
+      await _repository.clearThingModel();
+      await _log(LogLevel.info, 'thing-model', '物模型、面板和本地历史已删除');
+      await _reloadCoreState(statusText: '物模型已删除，可导入新的设备物模型');
+    } catch (error) {
+      await _log(LogLevel.error, 'thing-model', '物模型删除失败',
+          detail: error.toString());
+      _setState(state.copyWith(
+        busy: false,
+        logs: await _repository.loadLogs(),
+        statusText: '物模型删除失败',
+      ));
+      rethrow;
+    }
+  }
+
   Future<DashboardWidgetConfig?> dataWidgetForProperty(
       ThingProperty property) async {
     final existing = state.widgets.where(
@@ -477,6 +498,9 @@ class LinkBoxController extends ChangeNotifier {
       },
     );
   }
+
+  @visibleForTesting
+  bool get pollingFallbackActive => _pollTimer?.isActive ?? false;
 
   void _setState(LinkBoxState next) {
     state = next;
