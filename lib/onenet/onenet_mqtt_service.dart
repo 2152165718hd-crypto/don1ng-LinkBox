@@ -144,6 +144,17 @@ class OnenetMqttService {
     );
   }
 
+  MqttConnectMessage createConnectionMessage(
+      OnenetMqttCredentials credentials) {
+    return MqttConnectMessage()
+        .withProtocolName(MqttClientConstants.mqttV311ProtocolName)
+        .withProtocolVersion(MqttClientConstants.mqttV311ProtocolVersion)
+        .withClientIdentifier(credentials.clientId)
+        .authenticateAs(credentials.username, credentials.password)
+        .startClean()
+        .withWillQos(MqttQos.atMostOnce);
+  }
+
   Future<void> connect(ProjectConfig config) async {
     await disconnect();
     _states.add(OnenetMqttConnectionState.connecting);
@@ -170,11 +181,7 @@ class OnenetMqttService {
         () => _states.add(OnenetMqttConnectionState.connecting);
     client.onAutoReconnected =
         () => _states.add(OnenetMqttConnectionState.connected);
-    client.connectionMessage = MqttConnectMessage()
-        .withClientIdentifier(credentials.clientId)
-        .authenticateAs(credentials.username, credentials.password)
-        .startClean()
-        .withWillQos(MqttQos.atMostOnce);
+    client.connectionMessage = createConnectionMessage(credentials);
 
     _client = client;
     try {

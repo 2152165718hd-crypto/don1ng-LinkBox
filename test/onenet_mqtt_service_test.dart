@@ -79,4 +79,22 @@ void main() {
         contains('res=projectid%2FprojectA%2Fgroupid%2FgroupB'));
     expect(credentials.usesDeviceToken, isFalse);
   });
+
+  test('connection message pins MQTT 3.1.1 for OneNET', () {
+    final service = OnenetMqttService();
+    final message = service.createConnectionMessage(
+      const OnenetMqttCredentials(
+        clientId: 'clientA',
+        username: 'userB',
+        password: 'passC',
+        usesDeviceToken: true,
+      ),
+    );
+
+    expect(message.variableHeader?.protocolName, 'MQTT');
+    expect(message.variableHeader?.protocolVersion, 4);
+    expect(message.payload.clientIdentifier, 'clientA');
+    expect(message.payload.username, 'userB');
+    expect(message.payload.password, 'passC');
+  });
 }

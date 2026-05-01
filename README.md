@@ -1,14 +1,14 @@
 # don1ng LinkBox
 
-don1ng LinkBox 是一个 Flutter Android 应用，用于把 OneNET Studio 物模型设备快速接入手机端监控和控制面板。当前版本默认使用设备 Token 快速接入，可导入 `Token.log` 或手动填写设备连接信息后通过 MQTT 连接和控制；简单模式默认使用非加密 MQTT 1883，也可按需启用 SSL/TLS 8883；物模型 JSON 在物模型页单独导入，需要云端历史查询时仍可启用高级应用接入。
+don1ng LinkBox 是一个 Flutter Android 应用，用于把 OneNET Studio 物模型设备快速接入手机端监控和控制面板。当前版本默认使用设备 Token 快速接入，可导入 `Token.log` 或手动填写设备连接信息后通过 MQTT 3.1.1 连接和控制；简单模式默认使用非加密 MQTT 1883，也可按需启用 SSL/TLS 8883；物模型 JSON 在物模型页单独导入，需要云端历史查询时仍可启用高级应用接入。
 
 ![don1ng LinkBox cover](assets/branding/linkbox_cover.png)
 
 ## 当前版本
 
-- 最新版本：`v0.8.0`
-- 应用版本：`0.8.0+9`
-- Release 页面：[don1ng LinkBox v0.8.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.8.0)
+- 最新版本：`v0.8.1`
+- 应用版本：`0.8.1+10`
+- Release 页面：[don1ng LinkBox v0.8.1](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.8.1)
 - 状态：Android MVP；Release 支持本地签名 APK 构建，签名密钥不提交到仓库。
 - 更新日志：[CHANGELOG.md](CHANGELOG.md)
 - 版本管理规范：[VERSIONING.md](VERSIONING.md)
@@ -22,7 +22,7 @@ don1ng LinkBox 是一个 Flutter Android 应用，用于把 OneNET Studio 物模
 - 默认设备 Token 快速接入：可导入 `Token.log`，也可手动填写 `Product ID`、`Device Name`、`Device Key` 或 `Token`。
 - 高级 OneNET 项目分组/用户鉴权配置，本地保存，`AccessKey` 使用安全存储单独保存。
 - OpenAPI：高级应用接入下支持最新属性查询、历史属性查询、属性设置。
-- MQTT 长连接：简单模式使用设备 Token 身份，默认连接 `studio-mqtt.heclouds.com:1883`，也可启用 SSL/TLS 连接 `studio-mqtts.heclouds.com:8883`；高级模式保留应用长连接。
+- MQTT 长连接：简单模式使用设备 Token 身份，固定 MQTT 3.1.1 CONNECT 报文，默认连接 `studio-mqtt.heclouds.com:1883`，也可启用 SSL/TLS 连接 `studio-mqtts.heclouds.com:8883`；高级模式保留应用长连接。
 - OneNET TSL JSON 导入：提取 `identifier`、`name`、`dataType`、`specs`、`accessMode`，异常属性会跳过并生成导入报告。
 - 物模型删除：可清理已导入物模型、面板配置和本地历史数据，并自动断开当前实时连接。
 - Token.log 识别：可自动带出 `Product ID`、`Device Name`、`DeviceKey`/`Token` 和 Token 有效期。

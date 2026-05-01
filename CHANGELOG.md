@@ -2,6 +2,44 @@
 
 本项目按 `VERSIONING.md` 维护版本。每个版本必须说明版本定位、相较上一版的变化、迁移或兼容性影响、验证结果和发布产物状态。
 
+## v0.8.1 - 2026-05-01
+
+版本定位：OneNET MQTT 协议兼容性修复版本。
+
+相较 `v0.8.0`：这一版不改变配置界面和数据结构，重点修复 OneNET MQTT 连接兼容性。MQTT CONNECT 报文现在显式使用 MQTT 3.1.1 协议名和协议版本，避免客户端默认协议版本与 OneNET 服务端要求不一致时连接失败。
+
+新增：
+
+- 新增 MQTT 连接报文测试，覆盖协议名、协议版本、clientId、username 和 password。
+
+变更：
+
+- MQTT 连接报文创建逻辑抽出为 `createConnectionMessage()`，便于测试和后续诊断。
+- CONNECT 报文明确定义为 MQTT 3.1.1：协议名 `MQTT`，协议版本 `4`。
+- README 更新为 `v0.8.1`，补充 MQTT 3.1.1 兼容性说明。
+
+兼容性与迁移：
+
+- 无数据库 schema 版本升级。
+- 无备份 schema 版本升级。
+- 既有配置和 `mqtt_use_tls` 设置保持不变。
+
+验证：
+
+- `flutter pub get` 通过。
+- `dart format lib test` 通过。
+- `flutter analyze` 通过。
+- `flutter test` 通过。
+- `flutter build apk --release` 通过。
+- `apksigner verify --print-certs` 通过。
+
+发布产物：
+
+- GitHub Release：[v0.8.1](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.8.1)
+- 与上一版对比：[v0.8.0...v0.8.1](https://github.com/2152165718hd-crypto/don1ng-LinkBox/compare/v0.8.0...v0.8.1)
+- 本地 APK 归档：`build/app/outputs/versioned-apk/don1ng-LinkBox-v0.8.1-signed.apk`
+- GitHub Release 附件：`don1ng-LinkBox-v0.8.1-signed.apk`
+
 ## v0.8.0 - 2026-05-01
 
 版本定位：MQTT 连接端点与 TLS 开关版本。
