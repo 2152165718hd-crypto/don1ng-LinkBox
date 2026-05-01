@@ -27,7 +27,7 @@ class LinkBoxRepository {
     final dbPath = p.join(dir.path, 'don1ng_linkbox.db');
     _db = await openDatabase(
       dbPath,
-      version: 3,
+      version: 4,
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
     );
@@ -49,6 +49,7 @@ class LinkBoxRepository {
         auth_mode TEXT NOT NULL,
         refresh_seconds INTEGER NOT NULL,
         history_days INTEGER NOT NULL,
+        mqtt_use_tls INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
     ''');
@@ -142,6 +143,10 @@ class LinkBoxRepository {
           "TEXT NOT NULL DEFAULT '2018-10-31'");
       await _addColumnIfMissing(
           db, 'project_config', 'device_token_expires_at', 'INTEGER');
+    }
+    if (oldVersion < 4) {
+      await _addColumnIfMissing(
+          db, 'project_config', 'mqtt_use_tls', 'INTEGER NOT NULL DEFAULT 0');
     }
   }
 
@@ -438,7 +443,7 @@ class LinkBoxRepository {
       'don1ng-linkbox-backup-${_fileTimestamp(DateTime.now())}.json',
     ));
     final data = {
-      'schema': 3,
+      'schema': 4,
       'exported_at': DateTime.now().toIso8601String(),
       'project_config': config.toExportMap(includeSecret: includeSecret),
       'thing_properties': properties.map((item) => item.toExportMap()).toList(),

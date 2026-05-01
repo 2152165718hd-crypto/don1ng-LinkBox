@@ -32,6 +32,18 @@ class OnenetMqttCredentials {
   final bool usesDeviceToken;
 }
 
+class OnenetMqttEndpoint {
+  const OnenetMqttEndpoint({
+    required this.host,
+    required this.port,
+    required this.secure,
+  });
+
+  final String host;
+  final int port;
+  final bool secure;
+}
+
 class OnenetRealtimeMessage {
   const OnenetRealtimeMessage({
     required this.type,
@@ -87,6 +99,8 @@ class OnenetMqttService {
   }) : _auth = auth ?? const OnenetAuth();
 
   static const _mqttHost = 'studio-mqtt.heclouds.com';
+  static const _mqttTlsHost = 'studio-mqtts.heclouds.com';
+  static const _mqttPort = 1883;
   static const _mqttTlsPort = 8883;
 
   final OnenetAuth _auth;
@@ -96,6 +110,21 @@ class OnenetMqttService {
 
   Stream<OnenetRealtimeMessage> get messages => _messages.stream;
   Stream<OnenetMqttConnectionState> get states => _states.stream;
+
+  OnenetMqttEndpoint endpointFor(ProjectConfig config) {
+    if (config.mqttUseTls) {
+      return const OnenetMqttEndpoint(
+        host: _mqttTlsHost,
+        port: _mqttTlsPort,
+        secure: true,
+      );
+    }
+    return const OnenetMqttEndpoint(
+      host: _mqttHost,
+      port: _mqttPort,
+      secure: false,
+    );
+  }
 
   OnenetMqttCredentials credentialsFor(ProjectConfig config, {DateTime? now}) {
     if (config.authMode == AuthMode.deviceToken) {
@@ -119,12 +148,13 @@ class OnenetMqttService {
     await disconnect();
     _states.add(OnenetMqttConnectionState.connecting);
     final credentials = credentialsFor(config);
+    final endpoint = endpointFor(config);
     final client = MqttServerClient.withPort(
-      _mqttHost,
+      endpoint.host,
       credentials.clientId,
-      _mqttTlsPort,
+      endpoint.port,
     );
-    client.secure = true;
+    client.secure = endpoint.secure;
     client.keepAlivePeriod = 60;
     client.autoReconnect = true;
     client.resubscribeOnAutoReconnect = true;

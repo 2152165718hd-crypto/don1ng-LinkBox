@@ -585,16 +585,18 @@ class LinkBoxController extends ChangeNotifier {
         detail: detail,
       );
     }
+    final mqttEndpoint = config.mqttUseTls
+        ? 'studio-mqtts.heclouds.com:8883'
+        : 'studio-mqtt.heclouds.com:1883';
     if (error is SocketException) {
       return ConnectionFailureInfo(
         field: '网络连接',
         reason: '无法连接 OneNET MQTT 服务器。',
-        suggestion:
-            '检查当前网络、DNS、代理或防火墙是否允许访问 studio-mqtt.heclouds.com:8883，然后重新连接。',
+        suggestion: '检查当前网络、DNS、代理或防火墙是否允许访问 $mqttEndpoint，然后重新连接。',
         detail: detail,
       );
     }
-    if (error is HandshakeException) {
+    if (error is HandshakeException && config.mqttUseTls) {
       return ConnectionFailureInfo(
         field: 'TLS 连接',
         reason: 'MQTT TLS 握手失败。',

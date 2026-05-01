@@ -234,6 +234,7 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
   final _refreshSeconds = TextEditingController();
   final _historyDays = TextEditingController();
   AuthMode _authMode = AuthMode.deviceToken;
+  bool _mqttUseTls = false;
   String _fingerprint = '';
   bool _hasUserEdited = false;
   bool _syncingControllers = false;
@@ -376,6 +377,16 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
                     obscureText: true,
                   ),
                 ],
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.lock_outline),
+                  title: const Text('启用 SSL/TLS 加密'),
+                  value: _mqttUseTls,
+                  onChanged: (value) => setState(() {
+                    _hasUserEdited = true;
+                    _mqttUseTls = value;
+                  }),
+                ),
                 Row(
                   children: [
                     Expanded(
@@ -482,6 +493,7 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
       config.authMode.name,
       config.refreshSeconds,
       config.historyDays,
+      config.mqttUseTls,
     ].join('|');
   }
 
@@ -505,6 +517,7 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
       _authMode = config.authMode;
       _refreshSeconds.text = config.refreshSeconds.toString();
       _historyDays.text = config.historyDays.toString();
+      _mqttUseTls = config.mqttUseTls;
     } finally {
       _syncingControllers = false;
     }
@@ -534,6 +547,7 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
       authMode: _authMode,
       refreshSeconds: int.tryParse(_refreshSeconds.text.trim()) ?? 15,
       historyDays: int.tryParse(_historyDays.text.trim()) ?? 7,
+      mqttUseTls: _mqttUseTls,
     );
     await widget.controller.saveConfig(config);
     if (mounted) {
@@ -649,6 +663,7 @@ class _ConfigStatusCard extends StatelessWidget {
             : tokenExpiresAt == null
                 ? 'Token 已填写'
                 : _formatDateTime(tokenExpiresAt);
+    final mqttText = config.mqttUseTls ? 'SSL/TLS MQTT 8883' : '非加密 MQTT 1883';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -680,6 +695,7 @@ class _ConfigStatusCard extends StatelessWidget {
               'Product ID：${config.productId.isEmpty ? '-' : config.productId}'),
           Text(
               'Device Name：${config.deviceName.isEmpty ? '-' : config.deviceName}'),
+          Text('MQTT：$mqttText'),
           Text('Token：$tokenText'),
           Text('物模型属性：$propertyCount'),
         ],

@@ -2,6 +2,49 @@
 
 本项目按 `VERSIONING.md` 维护版本。每个版本必须说明版本定位、相较上一版的变化、迁移或兼容性影响、验证结果和发布产物状态。
 
+## v0.8.0 - 2026-05-01
+
+版本定位：MQTT 连接端点与 TLS 开关版本。
+
+相较 `v0.7.0`：这一版把简单设备 Token 模式的 MQTT 连接端点从固定 TLS 连接调整为可配置端点，默认使用 OneNET 非加密 MQTT 1883，并提供 SSL/TLS 8883 开关。设备配置、状态卡、连接诊断、数据库和备份导出都同步记录当前端点选择。
+
+新增：
+
+- 设备配置页新增“启用 SSL/TLS 加密”开关，用户可以在非加密 MQTT 与 SSL/TLS MQTT 之间切换。
+- OneNET MQTT 服务新增端点解析逻辑，默认连接 `studio-mqtt.heclouds.com:1883`，启用 SSL/TLS 后连接 `studio-mqtts.heclouds.com:8883`。
+- 配置状态卡新增 MQTT 端点模式显示，便于确认当前使用 1883 还是 8883。
+- 新增项目配置持久化测试，覆盖 `mqtt_use_tls` 默认值、数据库映射和备份导出映射。
+- 新增 MQTT 服务端点测试，覆盖默认非加密端点和 SSL/TLS 端点。
+
+变更：
+
+- MQTT 连接创建时会根据项目配置设置 host、port 和 secure 参数。
+- 连接失败诊断会显示当前实际访问的 MQTT host/port。
+- TLS 握手错误只在已启用 SSL/TLS 时归类为 TLS 连接问题，避免非加密模式下误导排查。
+- README 更新为 `v0.8.0`，补充 MQTT 1883/8883 端点说明和配置方式。
+
+兼容性与迁移：
+
+- 本地数据库 schema 从 `3` 升级到 `4`，为 `project_config` 增加 `mqtt_use_tls` 字段。
+- 已有配置升级后默认 `mqtt_use_tls = false`，即默认使用非加密 MQTT 1883。
+- 备份导出 schema 从 `3` 升级到 `4`，导出时会包含 `mqtt_use_tls`。
+
+验证：
+
+- `flutter pub get` 通过。
+- `dart format lib test` 通过。
+- `flutter analyze` 通过。
+- `flutter test` 通过。
+- `flutter build apk --release` 通过。
+- `apksigner verify --print-certs` 通过。
+
+发布产物：
+
+- GitHub Release：[v0.8.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.8.0)
+- 与上一版对比：[v0.7.0...v0.8.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/compare/v0.7.0...v0.8.0)
+- 本地 APK 归档：`build/app/outputs/versioned-apk/don1ng-LinkBox-v0.8.0-signed.apk`
+- GitHub Release 附件：`don1ng-LinkBox-v0.8.0-signed.apk`
+
 ## v0.7.0 - 2026-05-01
 
 版本定位：仪表盘 SVG 图标库与图标选择体验版本。

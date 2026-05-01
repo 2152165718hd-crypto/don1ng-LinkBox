@@ -3,6 +3,41 @@ import 'package:don1ng_linkbox/storage/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('default endpoint uses non encrypted MQTT', () {
+    final service = OnenetMqttService();
+    final endpoint = service.endpointFor(
+      const ProjectConfig(
+        projectId: '',
+        groupId: '',
+        accessKey: '',
+        productId: '5X53hoeOP1',
+        deviceName: 'don1ng',
+      ),
+    );
+
+    expect(endpoint.host, 'studio-mqtt.heclouds.com');
+    expect(endpoint.port, 1883);
+    expect(endpoint.secure, isFalse);
+  });
+
+  test('TLS endpoint uses encrypted MQTT', () {
+    final service = OnenetMqttService();
+    final endpoint = service.endpointFor(
+      const ProjectConfig(
+        projectId: '',
+        groupId: '',
+        accessKey: '',
+        productId: '5X53hoeOP1',
+        deviceName: 'don1ng',
+        mqttUseTls: true,
+      ),
+    );
+
+    expect(endpoint.host, 'studio-mqtts.heclouds.com');
+    expect(endpoint.port, 8883);
+    expect(endpoint.secure, isTrue);
+  });
+
   test('device token mode uses device MQTT identity', () {
     final service = OnenetMqttService();
     final credentials = service.credentialsFor(

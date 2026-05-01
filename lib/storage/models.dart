@@ -65,6 +65,7 @@ class ProjectConfig {
     this.authMode = AuthMode.deviceToken,
     this.refreshSeconds = 15,
     this.historyDays = 7,
+    this.mqttUseTls = false,
   });
 
   final String projectId;
@@ -81,6 +82,7 @@ class ProjectConfig {
   final AuthMode authMode;
   final int refreshSeconds;
   final int historyDays;
+  final bool mqttUseTls;
 
   String get resource {
     if (authMode == AuthMode.deviceToken) {
@@ -137,6 +139,7 @@ class ProjectConfig {
     AuthMode? authMode,
     int? refreshSeconds,
     int? historyDays,
+    bool? mqttUseTls,
   }) {
     return ProjectConfig(
       projectId: projectId ?? this.projectId,
@@ -155,6 +158,7 @@ class ProjectConfig {
       authMode: authMode ?? this.authMode,
       refreshSeconds: refreshSeconds ?? this.refreshSeconds,
       historyDays: historyDays ?? this.historyDays,
+      mqttUseTls: mqttUseTls ?? this.mqttUseTls,
     );
   }
 
@@ -172,6 +176,7 @@ class ProjectConfig {
       'auth_mode': authMode.name,
       'refresh_seconds': refreshSeconds,
       'history_days': historyDays,
+      'mqtt_use_tls': mqttUseTls ? 1 : 0,
       'updated_at': DateTime.now().millisecondsSinceEpoch,
       if (includeSecret) 'access_key': accessKey,
     };
@@ -190,6 +195,7 @@ class ProjectConfig {
       'auth_mode': authMode.name,
       'refresh_seconds': refreshSeconds,
       'history_days': historyDays,
+      'mqtt_use_tls': mqttUseTls,
       if (includeSecret) ...{
         'access_key': accessKey,
         'device_key': deviceKey,
@@ -222,6 +228,7 @@ class ProjectConfig {
       ),
       refreshSeconds: (map['refresh_seconds'] as int?) ?? 15,
       historyDays: (map['history_days'] as int?) ?? 7,
+      mqttUseTls: _boolFromMap(map['mqtt_use_tls']),
     );
   }
 
@@ -235,6 +242,16 @@ class ProjectConfig {
       authMode: AuthMode.deviceToken,
     );
   }
+}
+
+bool _boolFromMap(Object? value) {
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  if (value is String) {
+    final normalized = value.trim().toLowerCase();
+    return normalized == 'true' || normalized == '1';
+  }
+  return false;
 }
 
 class ThingProperty {

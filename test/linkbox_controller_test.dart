@@ -82,7 +82,9 @@ void main() {
     );
 
     expect(config.authMode, AuthMode.deviceToken);
+    expect(config.mqttUseTls, isFalse);
     expect(controller.state.config.isReady, isTrue);
+    expect(controller.state.config.mqttUseTls, isFalse);
     expect(controller.state.config.productId, '5X53hoeOP1');
     expect(controller.state.config.deviceName, 'don1ng');
     expect(controller.state.properties, isEmpty);
