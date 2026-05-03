@@ -6,9 +6,9 @@ don1ng LinkBox 是一个 Flutter Android 应用，用于把 OneNET Studio 物模
 
 ## 当前版本
 
-- 最新版本：`v0.9.0`
-- 应用版本：`0.9.0+11`
-- Release 页面：[don1ng LinkBox v0.9.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.9.0)
+- 最新版本：`v0.9.1`
+- 应用版本：`0.9.1+12`
+- Release 页面：[don1ng LinkBox v0.9.1](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.9.1)
 - 状态：Android MVP；Release 支持本地签名 APK 构建，签名密钥不提交到仓库。
 - 更新日志：[CHANGELOG.md](CHANGELOG.md)
 - 版本管理规范：[VERSIONING.md](VERSIONING.md)
@@ -25,7 +25,7 @@ don1ng LinkBox 是一个 Flutter Android 应用，用于把 OneNET Studio 物模
 - MQTT 长连接：简单模式使用设备 Token 身份，固定 MQTT 3.1.1 CONNECT 报文，默认连接 `studio-mqtt.heclouds.com:1883`，也可启用 SSL/TLS 连接 `studio-mqtts.heclouds.com:8883`；高级模式保留应用长连接。
 - OneNET TSL JSON 导入：提取 `identifier`、`name`、`dataType`、`specs`、`accessMode`，异常属性会跳过并生成导入报告。
 - 物模型删除：可清理已导入物模型、面板配置和本地历史数据，并自动断开当前实时连接。
-- Token.log 识别：可自动带出 `Product ID`、`Device Name`、`DeviceKey`/`Token` 和 Token 有效期。
+- Token.log 识别：可自动带出 `Product ID`、`Device Name`、`DeviceKey`/`Token` 和 Token 有效期，并兼容 Android 文档选择器中 `.log` 文件被过滤隐藏的情况。
 - 连接失败诊断：缺失字段、Token 过期、鉴权失败、网络/TLS 问题会给出明确处理建议。
 - 自动生成默认面板：数值卡、进度条、仪表盘、开关、按钮、滑块、枚举选择、状态文本。
 - 属性历史查看：运行页点击实时卡片即可打开独立历史页，支持数值曲线、布尔/枚举阶梯图和文本列表。

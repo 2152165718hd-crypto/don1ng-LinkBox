@@ -562,8 +562,8 @@ class _ConfigScreenState extends ConsumerState<_ConfigScreen> {
 
   Future<void> _importTokenLog() async {
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['log', 'txt'],
+      // Android document providers can hide .log files behind custom filters.
+      type: FileType.any,
       withData: true,
     );
     if (result == null || result.files.isEmpty) return;

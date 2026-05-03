@@ -2,6 +2,43 @@
 
 本项目按 `VERSIONING.md` 维护版本。每个版本必须说明版本定位、相较上一版的变化、迁移或兼容性影响、验证结果和发布产物状态。
 
+## v0.9.1 - 2026-05-03
+
+版本定位：Token.log 文件选择兼容性修复版本。
+
+相较 `v0.9.0`：这一版不改变运行页、历史页和数据结构，重点修复 Android 文档选择器在自定义扩展名过滤下可能隐藏 `.log` 文件的问题。导入 Token.log 时改为允许选择任意文件，再交给现有解析逻辑校验内容。
+
+变更：
+
+- Token.log 导入入口从 `.log/.txt` 自定义过滤改为 `FileType.any`，提升 Android 文件管理器兼容性。
+- README 更新为 `v0.9.1`，补充 Token.log 文件选择兼容性说明。
+
+修复：
+
+- 修复部分 Android document provider 不显示 `.log` 文件，导致用户无法选择 Token.log 的问题。
+
+兼容性与迁移：
+
+- 无数据库 schema 版本升级。
+- 无备份 schema 版本升级。
+- 既有设备配置、物模型和历史数据不受影响。
+
+验证：
+
+- `flutter pub get` 通过。
+- `dart format lib test` 通过。
+- `flutter analyze` 通过。
+- `flutter test` 通过。
+- `flutter build apk --release` 通过。
+- `apksigner verify --print-certs` 通过。
+
+发布产物：
+
+- GitHub Release：[v0.9.1](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.9.1)
+- 与上一版对比：[v0.9.0...v0.9.1](https://github.com/2152165718hd-crypto/don1ng-LinkBox/compare/v0.9.0...v0.9.1)
+- 本地 APK 归档：`build/app/outputs/versioned-apk/don1ng-LinkBox-v0.9.1-signed.apk`
+- GitHub Release 附件：`don1ng-LinkBox-v0.9.1-signed.apk`
+
 ## v0.9.0 - 2026-05-03
 
 版本定位：属性历史页与实时面板交互版本。
