@@ -43,7 +43,8 @@ void main() {
     displayMode: DashboardDisplayMode.value,
   );
 
-  test('imports thing model and generates dashboard widgets', () async {
+  test('imports thing model and generates realtime dashboard widgets',
+      () async {
     final repository = _FakeRepository(config: config);
     final controller = LinkBoxController(
       repository: repository,
@@ -62,9 +63,54 @@ void main() {
 
     expect(controller.state.properties, [speed]);
     expect(
-      controller.state.widgets
-          .where((item) => item.propertyIdentifier == 'Speed'),
+      controller.state.widgets.where((item) =>
+          item.propertyIdentifier == 'Speed' &&
+          item.displayMode != DashboardDisplayMode.trendChart),
       isNotEmpty,
+    );
+    expect(
+      controller.state.widgets
+          .where((item) => item.displayMode == DashboardDisplayMode.trendChart),
+      isEmpty,
+    );
+  });
+
+  test('init removes legacy trend widgets from local dashboard state',
+      () async {
+    final repository = _FakeRepository(
+      config: config,
+      properties: [speed],
+      pages: [mainPage],
+      widgets: [
+        speedWidget,
+        const DashboardWidgetConfig(
+          id: 'speed_trend',
+          pageId: 'main',
+          type: DashboardWidgetType.trendChart,
+          propertyIdentifier: 'Speed',
+          title: '速度趋势',
+          x: 0,
+          y: 128,
+          width: 360,
+          height: 210,
+          displayMode: DashboardDisplayMode.trendChart,
+        ),
+      ],
+    );
+    final controller = LinkBoxController(repository: repository);
+    addTearDown(controller.dispose);
+
+    await controller.init();
+
+    expect(
+      controller.state.widgets
+          .where((item) => item.displayMode == DashboardDisplayMode.trendChart),
+      isEmpty,
+    );
+    expect(
+      repository.widgets
+          .where((item) => item.displayMode == DashboardDisplayMode.trendChart),
+      isEmpty,
     );
   });
 
@@ -396,6 +442,15 @@ class _FakeRepository extends LinkBoxRepository {
       byId[widget.id] = widget;
     }
     this.widgets = byId.values.toList();
+  }
+
+  @override
+  Future<void> replaceDashboard({
+    required List<DashboardPageConfig> pages,
+    required List<DashboardWidgetConfig> widgets,
+  }) async {
+    this.pages = List<DashboardPageConfig>.of(pages);
+    this.widgets = List<DashboardWidgetConfig>.of(widgets);
   }
 
   @override

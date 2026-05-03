@@ -96,9 +96,7 @@ void main() {
         contains(DashboardDisplayMode.switcher));
   });
 
-  test(
-      'dashboard factory creates data cards and numeric trend charts without duplicates',
-      () {
+  test('dashboard factory creates realtime cards without trend charts', () {
     const temp = ThingProperty(
       identifier: 'Temp',
       name: '温度',
@@ -120,7 +118,7 @@ void main() {
 
     expect(first.pages, hasLength(1));
     expect(_widgetsFor(first.widgets, 'Temp', trend: false), hasLength(1));
-    expect(_widgetsFor(first.widgets, 'Temp', trend: true), hasLength(1));
+    expect(_widgetsFor(first.widgets, 'Temp', trend: true), isEmpty);
     expect(_widgetsFor(first.widgets, 'Relay', trend: false), hasLength(1));
     expect(_widgetsFor(first.widgets, 'Relay', trend: true), isEmpty);
     expect(_widgetsFor(first.widgets, 'Temp', trend: false).single.iconKind,
@@ -143,8 +141,42 @@ void main() {
 
     expect(_widgetsFor(merged.widgets, 'Temp', trend: false), hasLength(1));
     expect(_widgetsFor(merged.widgets, 'Temp', trend: false).single.width, 222);
-    expect(_widgetsFor(merged.widgets, 'Temp', trend: true), hasLength(1));
+    expect(_widgetsFor(merged.widgets, 'Temp', trend: true), isEmpty);
     expect(_widgetsFor(merged.widgets, 'Relay', trend: false), hasLength(1));
+  });
+
+  test('dashboard factory strips legacy trend widgets when merging', () {
+    const temp = ThingProperty(
+      identifier: 'Temp',
+      name: '温度',
+      type: ThingDataType.float,
+      accessMode: AccessMode.readOnly,
+      rawType: 'float',
+    );
+    const legacyTrend = DashboardWidgetConfig(
+      id: 'trend',
+      pageId: 'main',
+      type: DashboardWidgetType.trendChart,
+      propertyIdentifier: 'Temp',
+      title: '温度趋势',
+      x: 0,
+      y: 120,
+      width: 360,
+      height: 210,
+      displayMode: DashboardDisplayMode.trendChart,
+      iconKind: DashboardIconKind.builtinSvg,
+      iconValue: 'svg_temperature',
+    );
+
+    final factory = DashboardFactory();
+    final merged = factory.mergeForProperties(
+      properties: const [temp],
+      pages: const [DashboardPageConfig(id: 'main', name: '主面板')],
+      widgets: const [legacyTrend],
+    );
+
+    expect(_widgetsFor(merged.widgets, 'Temp', trend: true), isEmpty);
+    expect(_widgetsFor(merged.widgets, 'Temp', trend: false), hasLength(1));
   });
 }
 

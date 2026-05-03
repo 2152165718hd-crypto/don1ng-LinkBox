@@ -213,7 +213,7 @@ class LinkBoxController extends ChangeNotifier {
         'thing-model',
         '成功导入 ${result.properties.length} 个属性，跳过 ${result.skipped.length} 个',
       );
-      await _reloadCoreState(statusText: '物模型导入完成，已生成可编辑 UI 卡片');
+      await _reloadCoreState(statusText: '物模型导入完成，已生成可编辑实时 UI 卡片');
       return result;
     } catch (error) {
       await _log(LogLevel.error, 'thing-model', '物模型导入失败',
@@ -225,8 +225,8 @@ class LinkBoxController extends ChangeNotifier {
 
   Future<void> regenerateDashboard() async {
     await _ensureDashboard(state.properties);
-    await _log(LogLevel.info, 'dashboard', '已补齐默认 UI 卡片和历史曲线');
-    await _reloadCoreState(statusText: '默认 UI 已补齐');
+    await _log(LogLevel.info, 'dashboard', '已补齐默认实时 UI 卡片');
+    await _reloadCoreState(statusText: '默认实时 UI 已补齐');
   }
 
   Future<void> clearThingModel() async {
@@ -634,13 +634,24 @@ class LinkBoxController extends ChangeNotifier {
       pages: pages,
       widgets: widgets,
     );
-    for (final page in dashboard.pages) {
-      await _repository.savePage(page);
-    }
-    await _repository.saveWidgets(dashboard.widgets);
+    await _repository.replaceDashboard(
+      pages: dashboard.pages,
+      widgets: dashboard.widgets,
+    );
+  }
+
+  Future<void> _removeLegacyTrendWidgets() async {
+    final pages = await _repository.loadPages();
+    final widgets = await _repository.loadWidgets();
+    final filtered = widgets
+        .where((item) => item.displayMode != DashboardDisplayMode.trendChart)
+        .toList();
+    if (filtered.length == widgets.length) return;
+    await _repository.replaceDashboard(pages: pages, widgets: filtered);
   }
 
   Future<void> _reloadCoreState({String statusText = ''}) async {
+    await _removeLegacyTrendWidgets();
     _setState(
       state.copyWith(
         config: await _repository.loadConfig(),

@@ -29,15 +29,13 @@ class DashboardFactory {
         ? const [DashboardPageConfig(id: 'main', name: '运行面板')]
         : List<DashboardPageConfig>.of(pages);
     final pageId = nextPages.first.id;
-    final nextWidgets = List<DashboardWidgetConfig>.of(widgets);
-    final dataBindings = nextWidgets
-        .where((item) => item.displayMode != DashboardDisplayMode.trendChart)
-        .map((item) => item.propertyIdentifier)
-        .toSet();
-    final chartBindings = nextWidgets
-        .where((item) => item.displayMode == DashboardDisplayMode.trendChart)
-        .map((item) => item.propertyIdentifier)
-        .toSet();
+    final nextWidgets = List<DashboardWidgetConfig>.of(
+      widgets.where(
+        (item) => item.displayMode != DashboardDisplayMode.trendChart,
+      ),
+    );
+    final dataBindings =
+        nextWidgets.map((item) => item.propertyIdentifier).toSet();
 
     var nextPosition = _nextPosition(nextWidgets);
     for (final property in properties) {
@@ -62,27 +60,6 @@ class DashboardFactory {
           ),
         );
         nextPosition = nextPosition.nextCard();
-      }
-      if (property.isNumeric && !chartBindings.contains(property.identifier)) {
-        nextWidgets.add(
-          DashboardWidgetConfig(
-            id: _uuid.v4(),
-            pageId: pageId,
-            type: DashboardWidgetType.trendChart,
-            propertyIdentifier: property.identifier,
-            title: '${property.displayName}趋势',
-            x: DashboardLayoutConstants.defaultCardX,
-            y: nextPosition.y,
-            width: DashboardLayoutConstants.defaultChartWidth,
-            height: DashboardLayoutConstants.defaultChartHeight,
-            displayMode: DashboardDisplayMode.trendChart,
-            iconKind: DashboardIconKind.builtinSvg,
-            iconValue: defaultBuiltinIconKey(property),
-            showUnit: true,
-            decimalDigits: property.isNumeric ? 1 : 0,
-          ),
-        );
-        nextPosition = nextPosition.nextChart();
       }
     }
 
@@ -158,14 +135,6 @@ class _DashboardPosition {
     return _DashboardPosition(
       DashboardLayoutConstants.defaultCardX,
       y + DashboardLayoutConstants.cardRowHeight,
-      0,
-    );
-  }
-
-  _DashboardPosition nextChart() {
-    return _DashboardPosition(
-      DashboardLayoutConstants.defaultCardX,
-      y + DashboardLayoutConstants.chartRowHeight,
       0,
     );
   }

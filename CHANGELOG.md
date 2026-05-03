@@ -2,6 +2,48 @@
 
 本项目按 `VERSIONING.md` 维护版本。每个版本必须说明版本定位、相较上一版的变化、迁移或兼容性影响、验证结果和发布产物状态。
 
+## v0.9.0 - 2026-05-03
+
+版本定位：属性历史页与实时面板交互版本。
+
+相较 `v0.8.1`：这一版把原先由默认面板自动生成的趋势图改为独立的属性历史页。运行页的数据卡片现在可直接点击查看历史，数值属性展示曲线，布尔和枚举属性展示阶梯图，文本属性展示列表；同时会清理本地残留的旧趋势控件并以实时卡片重新组织默认面板。
+
+新增：
+
+- 新增 `PropertyHistoryScreen`，用于按属性查看历史数据。
+- 运行页数据卡片新增历史入口，点击即可打开属性历史页。
+- 历史页支持数值曲线、布尔/枚举阶梯图和文本列表三种展示方式。
+- 新增属性历史页测试，覆盖数值、布尔、枚举、文本和空状态。
+
+变更：
+
+- 默认面板生成逻辑不再自动创建趋势图，只生成实时控制卡。
+- 启动时会清理本地旧趋势控件，避免旧布局和新历史页同时存在。
+- 物模型页文案和运行页文案更新为“实时卡片 + 独立历史页”的交互方式。
+- README 更新为 `v0.9.0`，补充属性历史查看说明。
+
+兼容性与迁移：
+
+- 无数据库 schema 版本升级。
+- 无备份 schema 版本升级。
+- 旧版 `trendChart` 控件会在初始化时从本地面板中移除，并由实时卡片与独立历史页替代，历史数据本身保留不变。
+
+验证：
+
+- `flutter pub get` 通过。
+- `dart format lib test` 通过。
+- `flutter analyze` 通过。
+- `flutter test` 通过。
+- `flutter build apk --release` 通过。
+- `apksigner verify --print-certs` 通过。
+
+发布产物：
+
+- GitHub Release：[v0.9.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/releases/tag/v0.9.0)
+- 与上一版对比：[v0.8.1...v0.9.0](https://github.com/2152165718hd-crypto/don1ng-LinkBox/compare/v0.8.1...v0.9.0)
+- 本地 APK 归档：`build/app/outputs/versioned-apk/don1ng-LinkBox-v0.9.0-signed.apk`
+- GitHub Release 附件：`don1ng-LinkBox-v0.9.0-signed.apk`
+
 ## v0.8.1 - 2026-05-01
 
 版本定位：OneNET MQTT 协议兼容性修复版本。

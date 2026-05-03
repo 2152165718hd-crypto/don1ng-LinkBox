@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -19,6 +18,7 @@ class DashboardTile extends StatelessWidget {
     this.editMode = false,
     this.onEdit,
     this.onDelete,
+    this.onHistoryTap,
   });
 
   final DashboardWidgetConfig config;
@@ -28,51 +28,99 @@ class DashboardTile extends StatelessWidget {
   final bool editMode;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final VoidCallback? onHistoryTap;
 
   @override
   Widget build(BuildContext context) {
     final foreground = Color(config.textColor);
     final child = switch (config.displayMode) {
-      DashboardDisplayMode.value =>
-        _ValueCard(config: config, property: property, value: value),
-      DashboardDisplayMode.progress =>
-        _ProgressCard(config: config, property: property, value: value),
+      DashboardDisplayMode.value => _ValueCard(
+          config: config,
+          property: property,
+          value: value,
+          onHistoryTap: onHistoryTap,
+        ),
+      DashboardDisplayMode.progress => _ProgressCard(
+          config: config,
+          property: property,
+          value: value,
+          onHistoryTap: onHistoryTap,
+        ),
       DashboardDisplayMode.slider => _SliderControl(
           config: config,
           property: property,
           value: value,
           controller: controller,
+          onHistoryTap: onHistoryTap,
         ),
-      DashboardDisplayMode.gauge =>
-        _GaugeCard(config: config, property: property, value: value),
+      DashboardDisplayMode.gauge => _GaugeCard(
+          config: config,
+          property: property,
+          value: value,
+          onHistoryTap: onHistoryTap,
+        ),
       DashboardDisplayMode.switcher => _SwitchControl(
           config: config,
           property: property,
           value: value,
           controller: controller,
+          onHistoryTap: onHistoryTap,
         ),
       DashboardDisplayMode.button => _ButtonControl(
           config: config,
           property: property,
           value: value,
           controller: controller,
+          onHistoryTap: onHistoryTap,
         ),
       DashboardDisplayMode.enumSelect => _EnumControl(
           config: config,
           property: property,
           value: value,
           controller: controller,
+          onHistoryTap: onHistoryTap,
         ),
-      DashboardDisplayMode.status =>
-        _StatusCard(config: config, property: property, value: value),
-      DashboardDisplayMode.text =>
-        _TextCard(config: config, property: property, value: value),
-      DashboardDisplayMode.trendChart => _TrendChart(
+      DashboardDisplayMode.status => _StatusCard(
           config: config,
           property: property,
-          controller: controller,
+          value: value,
+          onHistoryTap: onHistoryTap,
+        ),
+      DashboardDisplayMode.text => _TextCard(
+          config: config,
+          property: property,
+          value: value,
+          onHistoryTap: onHistoryTap,
+        ),
+      DashboardDisplayMode.trendChart => _ValueCard(
+          config: config,
+          property: property,
+          value: value,
+          onHistoryTap: onHistoryTap,
         ),
     };
+
+    final canOpenHistory = onHistoryTap != null && !editMode;
+    final isControlWidget = switch (config.displayMode) {
+      DashboardDisplayMode.slider ||
+      DashboardDisplayMode.switcher ||
+      DashboardDisplayMode.button ||
+      DashboardDisplayMode.enumSelect =>
+        true,
+      _ => false,
+    };
+    final tileBody = canOpenHistory && !isControlWidget
+        ? InkWell(
+            onTap: onHistoryTap,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: child,
+            ),
+          )
+        : Padding(
+            padding: const EdgeInsets.all(12),
+            child: child,
+          );
 
     return Card(
       color: Color(config.backgroundColor),
@@ -83,10 +131,7 @@ class DashboardTile extends StatelessWidget {
           data: IconThemeData(color: foreground),
           child: Stack(
             children: [
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: child,
-              ),
+              tileBody,
               if (editMode)
                 Positioned(
                   top: 2,
@@ -116,10 +161,12 @@ class _TileHeader extends StatelessWidget {
   const _TileHeader({
     required this.config,
     required this.property,
+    this.onHistoryTap,
   });
 
   final DashboardWidgetConfig config;
   final ThingProperty property;
+  final VoidCallback? onHistoryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -137,6 +184,16 @@ class _TileHeader extends StatelessWidget {
                 ),
           ),
         ),
+        if (onHistoryTap != null)
+          IconButton(
+            tooltip: '查看历史',
+            onPressed: onHistoryTap,
+            icon: const Icon(Icons.show_chart),
+            iconSize: 18,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+          ),
       ],
     );
   }
@@ -195,11 +252,13 @@ class _ValueCard extends StatelessWidget {
     required this.config,
     required this.property,
     required this.value,
+    this.onHistoryTap,
   });
 
   final DashboardWidgetConfig config;
   final ThingProperty property;
   final RuntimeValue? value;
+  final VoidCallback? onHistoryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -207,7 +266,11 @@ class _ValueCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _TileHeader(config: config, property: property),
+        _TileHeader(
+          config: config,
+          property: property,
+          onHistoryTap: onHistoryTap,
+        ),
         const Spacer(),
         FittedBox(
           fit: BoxFit.scaleDown,
@@ -238,11 +301,13 @@ class _StatusCard extends StatelessWidget {
     required this.config,
     required this.property,
     required this.value,
+    this.onHistoryTap,
   });
 
   final DashboardWidgetConfig config;
   final ThingProperty property;
   final RuntimeValue? value;
+  final VoidCallback? onHistoryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -250,7 +315,11 @@ class _StatusCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _TileHeader(config: config, property: property),
+        _TileHeader(
+          config: config,
+          property: property,
+          onHistoryTap: onHistoryTap,
+        ),
         const Spacer(),
         Container(
           width: double.infinity,
@@ -280,18 +349,24 @@ class _TextCard extends StatelessWidget {
     required this.config,
     required this.property,
     required this.value,
+    this.onHistoryTap,
   });
 
   final DashboardWidgetConfig config;
   final ThingProperty property;
   final RuntimeValue? value;
+  final VoidCallback? onHistoryTap;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _TileHeader(config: config, property: property),
+        _TileHeader(
+          config: config,
+          property: property,
+          onHistoryTap: onHistoryTap,
+        ),
         const SizedBox(height: 10),
         Expanded(
           child: Text(
@@ -314,11 +389,13 @@ class _ProgressCard extends StatelessWidget {
     required this.config,
     required this.property,
     required this.value,
+    this.onHistoryTap,
   });
 
   final DashboardWidgetConfig config;
   final ThingProperty property;
   final RuntimeValue? value;
+  final VoidCallback? onHistoryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -326,7 +403,11 @@ class _ProgressCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _TileHeader(config: config, property: property),
+        _TileHeader(
+          config: config,
+          property: property,
+          onHistoryTap: onHistoryTap,
+        ),
         const Spacer(),
         Text(
           _formatDisplayValue(config, property, value?.value),
@@ -351,11 +432,13 @@ class _GaugeCard extends StatelessWidget {
     required this.config,
     required this.property,
     required this.value,
+    this.onHistoryTap,
   });
 
   final DashboardWidgetConfig config;
   final ThingProperty property;
   final RuntimeValue? value;
+  final VoidCallback? onHistoryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -363,7 +446,11 @@ class _GaugeCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _TileHeader(config: config, property: property),
+        _TileHeader(
+          config: config,
+          property: property,
+          onHistoryTap: onHistoryTap,
+        ),
         const SizedBox(height: 8),
         Expanded(
           child: Center(
@@ -405,12 +492,14 @@ class _SwitchControl extends StatefulWidget {
     required this.property,
     required this.value,
     required this.controller,
+    this.onHistoryTap,
   });
 
   final DashboardWidgetConfig config;
   final ThingProperty property;
   final RuntimeValue? value;
   final LinkBoxController controller;
+  final VoidCallback? onHistoryTap;
 
   @override
   State<_SwitchControl> createState() => _SwitchControlState();
@@ -425,7 +514,11 @@ class _SwitchControlState extends State<_SwitchControl> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _TileHeader(config: widget.config, property: widget.property),
+        _TileHeader(
+          config: widget.config,
+          property: widget.property,
+          onHistoryTap: widget.onHistoryTap,
+        ),
         const Spacer(),
         Row(
           children: [
@@ -466,12 +559,14 @@ class _ButtonControl extends StatefulWidget {
     required this.property,
     required this.value,
     required this.controller,
+    this.onHistoryTap,
   });
 
   final DashboardWidgetConfig config;
   final ThingProperty property;
   final RuntimeValue? value;
   final LinkBoxController controller;
+  final VoidCallback? onHistoryTap;
 
   @override
   State<_ButtonControl> createState() => _ButtonControlState();
@@ -486,7 +581,11 @@ class _ButtonControlState extends State<_ButtonControl> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _TileHeader(config: widget.config, property: widget.property),
+        _TileHeader(
+          config: widget.config,
+          property: widget.property,
+          onHistoryTap: widget.onHistoryTap,
+        ),
         const Spacer(),
         SizedBox(
           width: double.infinity,
@@ -517,12 +616,14 @@ class _SliderControl extends StatefulWidget {
     required this.property,
     required this.value,
     required this.controller,
+    this.onHistoryTap,
   });
 
   final DashboardWidgetConfig config;
   final ThingProperty property;
   final RuntimeValue? value;
   final LinkBoxController controller;
+  final VoidCallback? onHistoryTap;
 
   @override
   State<_SliderControl> createState() => _SliderControlState();
@@ -545,7 +646,11 @@ class _SliderControlState extends State<_SliderControl> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _TileHeader(config: widget.config, property: widget.property),
+        _TileHeader(
+          config: widget.config,
+          property: widget.property,
+          onHistoryTap: widget.onHistoryTap,
+        ),
         const Spacer(),
         Text(
           _formatDisplayValue(widget.config, widget.property, current),
@@ -589,12 +694,14 @@ class _EnumControl extends StatelessWidget {
     required this.property,
     required this.value,
     required this.controller,
+    this.onHistoryTap,
   });
 
   final DashboardWidgetConfig config;
   final ThingProperty property;
   final RuntimeValue? value;
   final LinkBoxController controller;
+  final VoidCallback? onHistoryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -603,7 +710,11 @@ class _EnumControl extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _TileHeader(config: config, property: property),
+        _TileHeader(
+          config: config,
+          property: property,
+          onHistoryTap: onHistoryTap,
+        ),
         const Spacer(),
         if (entries.isEmpty)
           Text(
@@ -634,107 +745,6 @@ class _EnumControl extends StatelessWidget {
             decoration: const InputDecoration(labelText: '枚举值'),
           ),
       ],
-    );
-  }
-}
-
-class _TrendChart extends StatefulWidget {
-  const _TrendChart({
-    required this.config,
-    required this.property,
-    required this.controller,
-  });
-
-  final DashboardWidgetConfig config;
-  final ThingProperty property;
-  final LinkBoxController controller;
-
-  @override
-  State<_TrendChart> createState() => _TrendChartState();
-}
-
-class _TrendChartState extends State<_TrendChart> {
-  late Future<List<RuntimeValue>> _historyFuture;
-  late int _historyDays;
-
-  @override
-  void initState() {
-    super.initState();
-    _historyDays = widget.controller.state.config.historyDays;
-    _historyFuture = widget.controller.loadHistory(widget.property);
-  }
-
-  @override
-  void didUpdateWidget(covariant _TrendChart oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final nextHistoryDays = widget.controller.state.config.historyDays;
-    final shouldReload = oldWidget.controller != widget.controller ||
-        oldWidget.property.identifier != widget.property.identifier ||
-        _historyDays != nextHistoryDays;
-    if (shouldReload) {
-      _historyDays = nextHistoryDays;
-      _historyFuture = widget.controller.loadHistory(widget.property);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<RuntimeValue>>(
-      future: _historyFuture,
-      builder: (context, snapshot) {
-        final values = snapshot.data ?? const [];
-        final spots = <FlSpot>[];
-        for (var i = 0; i < values.length; i++) {
-          final y = double.tryParse(values[i].value?.toString() ?? '');
-          if (y != null) spots.add(FlSpot(i.toDouble(), y));
-        }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _TileHeader(config: widget.config, property: widget.property),
-            const SizedBox(height: 10),
-            Expanded(
-              child: spots.isEmpty
-                  ? Center(
-                      child: Text(
-                        snapshot.connectionState == ConnectionState.waiting
-                            ? '加载中'
-                            : '暂无历史数据',
-                        style:
-                            TextStyle(color: _subtleTextColor(widget.config)),
-                      ),
-                    )
-                  : LineChart(
-                      LineChartData(
-                        gridData: const FlGridData(
-                            show: true, drawVerticalLine: false),
-                        titlesData: const FlTitlesData(
-                          leftTitles: AxisTitles(
-                              sideTitles: SideTitles(
-                                  showTitles: true, reservedSize: 36)),
-                          bottomTitles: AxisTitles(
-                              sideTitles: SideTitles(showTitles: false)),
-                          topTitles: AxisTitles(
-                              sideTitles: SideTitles(showTitles: false)),
-                          rightTitles: AxisTitles(
-                              sideTitles: SideTitles(showTitles: false)),
-                        ),
-                        borderData: FlBorderData(show: false),
-                        lineBarsData: [
-                          LineChartBarData(
-                            spots: spots,
-                            isCurved: true,
-                            color: Theme.of(context).colorScheme.primary,
-                            barWidth: 2,
-                            dotData: const FlDotData(show: false),
-                          ),
-                        ],
-                      ),
-                    ),
-            ),
-          ],
-        );
-      },
     );
   }
 }

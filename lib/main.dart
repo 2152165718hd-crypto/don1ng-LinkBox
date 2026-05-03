@@ -14,6 +14,7 @@ import 'dashboard/dashboard_widgets.dart';
 import 'dashboard/icon_library.dart';
 import 'onenet/onenet_mqtt_service.dart';
 import 'runtime/linkbox_controller.dart';
+import 'runtime/property_history_screen.dart';
 import 'storage/models.dart';
 import 'thing_model/thing_model_importer.dart';
 
@@ -754,7 +755,7 @@ class _ThingModelScreen extends StatelessWidget {
             icon: Icons.dataset_outlined,
             title: '还没有物模型',
             message:
-                '请导入 OneNET Studio 导出的 TSL JSON。导入后，每个属性会自动生成可编辑 UI 卡片，数值型属性会额外生成历史曲线。',
+                '请导入 OneNET Studio 导出的 TSL JSON。导入后，每个属性会自动生成可编辑的实时 UI 卡片；历史曲线请在运行页点击数据查看。',
           )
         else
           ...properties.map((property) =>
@@ -884,7 +885,7 @@ class _PropertyTile extends StatelessWidget {
                     }
                   },
                   icon: const Icon(Icons.tune),
-                  label: const Text('配置 UI'),
+                  label: const Text('配置实时 UI'),
                 ),
               ],
             ),
@@ -922,7 +923,7 @@ class _DashboardScreen extends StatelessWidget {
         child: _EmptyPanel(
           icon: Icons.dashboard_customize_outlined,
           title: '还没有面板控件',
-          message: '导入物模型后会自动生成可编辑 UI 卡片，也可以在物模型页补齐默认面板。',
+          message: '导入物模型后会自动生成可编辑的实时 UI 卡片，也可以在物模型页补齐默认面板。',
         ),
       );
     }
@@ -948,14 +949,27 @@ class _RuntimeScreen extends StatelessWidget {
         child: _EmptyPanel(
           icon: Icons.monitor_heart_outlined,
           title: '运行页未就绪',
-          message: '请先导入物模型并生成面板。',
+          message: '请先导入物模型并生成实时面板，然后点击数据卡片查看历史曲线。',
         ),
       );
     }
     return RefreshIndicator(
       onRefresh: controller.refreshLatest,
       child: _DashboardCanvas(
-          controller: controller, editMode: false, alwaysScrollable: true),
+        controller: controller,
+        editMode: false,
+        alwaysScrollable: true,
+        onHistoryTap: (property) {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => PropertyHistoryScreen(
+                controller: controller,
+                property: property,
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -965,11 +979,13 @@ class _DashboardCanvas extends StatelessWidget {
     required this.controller,
     required this.editMode,
     this.alwaysScrollable = false,
+    this.onHistoryTap,
   });
 
   final LinkBoxController controller;
   final bool editMode;
   final bool alwaysScrollable;
+  final ValueChanged<ThingProperty>? onHistoryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1030,6 +1046,7 @@ class _DashboardCanvas extends StatelessWidget {
                         property: propertyMap[item.propertyIdentifier]!,
                         value: state.values[item.propertyIdentifier],
                         editMode: editMode,
+                        onHistoryTap: onHistoryTap,
                         maxX: (canvasWidth - item.width)
                             .clamp(0.0, double.infinity)
                             .toDouble(),
@@ -1055,6 +1072,7 @@ class _DashboardTileFrame extends StatelessWidget {
     required this.property,
     required this.value,
     required this.editMode,
+    this.onHistoryTap,
     required this.maxX,
     required this.maxY,
   });
@@ -1064,6 +1082,7 @@ class _DashboardTileFrame extends StatelessWidget {
   final ThingProperty property;
   final RuntimeValue? value;
   final bool editMode;
+  final ValueChanged<ThingProperty>? onHistoryTap;
   final double maxX;
   final double maxY;
 
@@ -1075,6 +1094,7 @@ class _DashboardTileFrame extends StatelessWidget {
       value: value,
       controller: controller,
       editMode: editMode,
+      onHistoryTap: onHistoryTap == null ? null : () => onHistoryTap!(property),
       onEdit: () =>
           _openWidgetStyleEditor(context, controller, property, config),
       onDelete: () => controller.deleteWidget(config.id),
@@ -1850,7 +1870,8 @@ class _TutorialCard extends StatelessWidget {
             const Text('1. 在 OneNET Studio 创建产品和设备，接入协议选择 MQTT。'),
             const Text(
                 '2. 在设备页导入 Token.log，或手动填写 Product ID、Device Name、Device Key/Token。'),
-            const Text('3. 物模型 JSON 在物模型页单独导入，导入后会生成可编辑 UI 卡片。'),
+            const Text(
+                '3. 物模型 JSON 在物模型页单独导入，导入后会生成可编辑的实时 UI 卡片；历史曲线在运行页点击数据查看。'),
             const Text('4. 需要云端历史查询时，再展开高级应用接入填写应用鉴权。'),
             const SizedBox(height: 8),
             Text(
